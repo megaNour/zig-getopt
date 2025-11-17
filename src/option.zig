@@ -17,6 +17,18 @@ fn ValidateInt(comptime T: type, base: u8, merge_fn: fn (?T, T) T) type {
     };
 }
 
+fn ValidateFloat(comptime T: type, merge_fn: fn (?T, T) T) type {
+    return struct {
+        fn validate(actual: ?T, new_value: []const u8) ParseIntError!T {
+            switch (@typeInfo(T)) {
+                .float => {},
+                else => @compileError("ValidateInt only validates integers."),
+            }
+            return merge_fn(actual, try std.fmt.parseFloat(T, new_value));
+        }
+    };
+}
+
 fn MergeReplace(comptime T: type) type {
     return struct {
         pub fn merge(actual: ?T, new_value: T) T {
@@ -30,14 +42,27 @@ test "test" {
     const myMergingStrategy = MergeReplace(u8);
     const myIntValidator = ValidateInt(u8, 10, myMergingStrategy.merge);
     var names = [_][]const u8{"max-items"};
-    var coco = Option(u8){ .long_names = &names, .validator = myIntValidator.validate };
+    var cocoInt = Option(u8){ .long_names = &names, .validator = myIntValidator.validate };
     var iterator = try reentrant.argsWithAllocator(std.heap.page_allocator, true);
-    _ = try coco.processArg(
+    _ = try cocoInt.processArg(
         &iterator,
         Arg{
             .long_flag = .{
                 .name = "max-items",
                 .value = "10",
+            },
+        },
+    );
+    const myFloatMergingStrategy = MergeReplace(f64);
+    const myFloatValidator = ValidateFloat(f64, myFloatMergingStrategy.merge);
+    var names2 = [_][]const u8{"my-factor"};
+    var cocoFloat = Option(f64){ .long_names = &names2, .validator = myFloatValidator.validate };
+    _ = try cocoFloat.processArg(
+        &iterator,
+        Arg{
+            .long_flag = .{
+                .name = "my-factor",
+                .value = "0.3",
             },
         },
     );
