@@ -25,10 +25,6 @@ fn ValidateString(merge_fn: fn (?[]const u8, []const u8) []const u8) type {
 fn ValidateInt(comptime T: type, base: u8, merge_fn: fn (?T, T) T) type {
     return struct {
         fn validate(actual: ?T, new: []const u8) ParseIntError!T {
-            switch (@typeInfo(T)) {
-                .int => {},
-                else => @compileError(@typeName(@This()) ++ " only validates " ++ @typeName(T)),
-            }
             return merge_fn(actual, try std.fmt.parseInt(T, new, base));
         }
     };
@@ -37,10 +33,6 @@ fn ValidateInt(comptime T: type, base: u8, merge_fn: fn (?T, T) T) type {
 fn ValidateFloat(comptime T: type, merge_fn: fn (?T, T) T) type {
     return struct {
         fn validate(actual: ?T, new: []const u8) ParseFloatError!T {
-            switch (@typeInfo(T)) {
-                .float => {},
-                else => @compileError(@typeName(@This()) ++ " only validates " ++ @typeName(T)),
-            }
             return merge_fn(actual, try std.fmt.parseFloat(T, new));
         }
     };
