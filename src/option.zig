@@ -47,6 +47,56 @@ fn MergeReplace(comptime T: type) type {
     };
 }
 
+pub fn Option(comptime T: type) type {
+    return struct {
+        short_name: ?u8 = null,
+        long_names: ?[][]const u8 = null,
+        description: ?[]const u8 = null,
+        required: bool = false,
+        validator: *const fn (actual: ?T, new: []const u8) anyerror!T,
+        value: ?T = null,
+
+        pub fn processArg(self: *@This(), iterator: *ReentrantArgIterator, arg: Arg) !bool {
+            switch (arg) {
+                .positional => {
+                    return true;
+                },
+                .short_flag => |short| {
+                    if (self.short_name == short.name) {
+                        try self.consumeArg(short.value, iterator);
+                        return true;
+                    }
+                    return false;
+                },
+                .long_flag => |long| {
+                    if (self.long_names) |names| {
+                        for (names) |name| {
+                            if (std.mem.eql(u8, name, long.name)) {
+                                try self.consumeArg(long.value, iterator);
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                },
+            }
+        }
+
+        fn consumeArg(self: *@This(), value: []const u8, iterator: *ReentrantArgIterator) !void {
+            if (self.required and value.len == 0) { // no "=value": expect next arg to be its value
+                if (iterator.first_pass) { // but only affect in first pass
+                    self.value = try self.validator(self.value, iterator.next() orelse "");
+                } else iterator.skip(); // otherwise, still hold counts
+            }
+            if (!self.required and self.value == null) {
+                if (iterator.first_pass) {
+                    self.value = try self.validator(self.value, value);
+                }
+            }
+        }
+    };
+}
+
 test "test" {
     const myMergingStrategy = MergeReplace(u8);
     const myIntValidator = ValidateInt(u8, 10, myMergingStrategy.merge);
@@ -110,54 +160,4 @@ test "test" {
     }
     std.debug.print("\nvalue is: {s}", .{label});
     std.debug.print("\n", .{});
-}
-
-pub fn Option(comptime T: type) type {
-    return struct {
-        short_name: ?u8 = null,
-        long_names: ?[][]const u8 = null,
-        description: ?[]const u8 = null,
-        required: bool = false,
-        validator: *const fn (actual: ?T, new: []const u8) anyerror!T,
-        value: ?T = null,
-
-        pub fn processArg(self: *@This(), iterator: *ReentrantArgIterator, arg: Arg) !bool {
-            switch (arg) {
-                .positional => {
-                    return true;
-                },
-                .short_flag => |short| {
-                    if (self.short_name == short.name) {
-                        try self.consumeArg(short.value, iterator);
-                        return true;
-                    }
-                    return false;
-                },
-                .long_flag => |long| {
-                    if (self.long_names) |names| {
-                        for (names) |name| {
-                            if (std.mem.eql(u8, name, long.name)) {
-                                try self.consumeArg(long.value, iterator);
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
-                },
-            }
-        }
-
-        fn consumeArg(self: *@This(), value: []const u8, iterator: *ReentrantArgIterator) !void {
-            if (self.required and value.len == 0) { // no "=value": expect next arg to be its value
-                if (iterator.first_pass) { // but only affect in first pass
-                    self.value = try self.validator(self.value, iterator.next() orelse "");
-                } else iterator.skip(); // otherwise, still hold counts
-            }
-            if (!self.required and self.value == null) {
-                if (iterator.first_pass) {
-                    self.value = try self.validator(self.value, value);
-                }
-            }
-        }
-    };
 }
