@@ -51,9 +51,9 @@ test "test" {
     const myMergingStrategy = MergeReplace(u8);
     const myIntValidator = ValidateInt(u8, 10, myMergingStrategy.merge);
     var names = [_][]const u8{"max-items"};
-    var cocoInt = Option(u8){ .long_names = &names, .validator = myIntValidator.validate };
+    var optInt = Option(u8){ .long_names = &names, .validator = myIntValidator.validate };
     var iterator = try reentrant.argsWithAllocator(std.heap.page_allocator, true);
-    _ = try cocoInt.processArg(
+    _ = try optInt.processArg(
         &iterator,
         Arg{
             .long_flag = .{
@@ -62,12 +62,12 @@ test "test" {
             },
         },
     );
-    std.debug.print("\nvalue is: {d}", .{cocoInt.value.?});
+    std.debug.print("\nvalue is: {d}", .{optInt.value.?});
     const myFloatMergingStrategy = MergeReplace(f64);
     const myFloatValidator = ValidateFloat(f64, myFloatMergingStrategy.merge);
     var names2 = [_][]const u8{"my-factor"};
-    var cocoFloat = Option(f64){ .long_names = &names2, .validator = myFloatValidator.validate };
-    _ = try cocoFloat.processArg(
+    var optFloat = Option(f64){ .long_names = &names2, .validator = myFloatValidator.validate };
+    _ = try optFloat.processArg(
         &iterator,
         Arg{
             .long_flag = .{
@@ -76,12 +76,12 @@ test "test" {
             },
         },
     );
-    std.debug.print("\nvalue is: {e}", .{cocoFloat.value.?});
+    std.debug.print("\nvalue is: {e}", .{optFloat.value.?});
     const myStringMergingStrategy = MergeReplace([]const u8);
     const myStringValidator = ValidateString(myStringMergingStrategy.merge);
     var names3 = [_][]const u8{"my-chain"};
-    var cocoString = Option([]const u8){ .long_names = &names3, .validator = myStringValidator.validate };
-    _ = try cocoString.processArg(
+    var optString = Option([]const u8){ .long_names = &names3, .validator = myStringValidator.validate };
+    _ = try optString.processArg(
         &iterator,
         Arg{
             .long_flag = .{
@@ -90,12 +90,12 @@ test "test" {
             },
         },
     );
-    std.debug.print("\nvalue is: {s}", .{cocoString.value.?});
+    std.debug.print("\nvalue is: {s}", .{optString.value.?});
     const myBoolMergingStrategy = MergeReplace(bool);
     const myBoolValidator = ValidateBool(myBoolMergingStrategy.merge);
     var names4 = [_][]const u8{"my-bool"};
-    var cocoBool = Option(bool){ .long_names = &names4, .validator = myBoolValidator.validate };
-    _ = try cocoBool.processArg(
+    var optBool = Option(bool){ .long_names = &names4, .validator = myBoolValidator.validate };
+    _ = try optBool.processArg(
         &iterator,
         Arg{
             .long_flag = .{
@@ -105,7 +105,7 @@ test "test" {
         },
     );
     var label: []const u8 = "false";
-    if (cocoBool.value) |b| {
+    if (optBool.value) |b| {
         label = if (b) "true" else "false";
     }
     std.debug.print("\nvalue is: {s}", .{label});
