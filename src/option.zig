@@ -62,6 +62,7 @@ test "test" {
             },
         },
     );
+    std.debug.print("\nvalue is: {d}", .{cocoInt.value.?});
     const myFloatMergingStrategy = MergeReplace(f64);
     const myFloatValidator = ValidateFloat(f64, myFloatMergingStrategy.merge);
     var names2 = [_][]const u8{"my-factor"};
@@ -75,6 +76,7 @@ test "test" {
             },
         },
     );
+    std.debug.print("\nvalue is: {e}", .{cocoFloat.value.?});
     const myStringMergingStrategy = MergeReplace([]const u8);
     const myStringValidator = ValidateString(myStringMergingStrategy.merge);
     var names3 = [_][]const u8{"my-chain"};
@@ -88,6 +90,7 @@ test "test" {
             },
         },
     );
+    std.debug.print("\nvalue is: {s}", .{cocoString.value.?});
     const myBoolMergingStrategy = MergeReplace(bool);
     const myBoolValidator = ValidateBool(myBoolMergingStrategy.merge);
     var names4 = [_][]const u8{"my-bool"};
@@ -101,6 +104,11 @@ test "test" {
             },
         },
     );
+    var label: []const u8 = "false";
+    if (cocoBool.value) |b| {
+        label = if (b) "true" else "false";
+    }
+    std.debug.print("\nvalue is: {s}", .{label});
     std.debug.print("\n", .{});
 }
 
@@ -149,17 +157,6 @@ pub fn Option(comptime T: type) type {
                 if (iterator.first_pass) {
                     self.value = try self.validator(self.value, value);
                 }
-            }
-            // TODO: test purpose, remove
-            switch (@TypeOf(self.value.?)) {
-                bool => {
-                    const label = if (value.len > 0) "true" else "false";
-                    std.debug.print("\nvalue is: {s}", .{label});
-                },
-                u8 => std.debug.print("\nvalue is: {d}", .{self.value.?}),
-                f64 => std.debug.print("\nvalue is: {e}", .{self.value.?}),
-                []const u8 => std.debug.print("\nvalue is: {s}", .{self.value.?}),
-                else => std.debug.print("\nvalue is (non-formatted): {any}", .{self.value.?}),
             }
         }
     };
