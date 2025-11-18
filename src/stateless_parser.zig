@@ -88,10 +88,9 @@ pub const Option = struct {
                                 if (arg.len > i + 1) {
                                     if (arg[i + 1] == '=') {
                                         return self.parseArg(arg[i..]);
-                                    } else if (arg[i + 1] != '=') {
-                                        std.debug.panic("{}: '{d}' requires an argument. It can be alone or the last one of a flag chain. Got: {s}", .{ ParsingError.MissingValue, c, arg });
                                     }
-                                } else std.debug.panic("{}: '{d}' requires an argument. It can be alone or the last one of a flag chain. Got: {s}", .{ ParsingError.MissingValue, c, arg });
+                                }
+                                std.debug.panic("{}: '{d}' requires an argument. It can be alone or the last one of a flag chain. Got: {s}", .{ ParsingError.MissingValue, c, arg });
                             },
                             Level.allowed => {
                                 if (arg.len > i + 1) {
