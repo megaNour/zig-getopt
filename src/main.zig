@@ -1,6 +1,7 @@
 const std = @import("std");
 const reentrant = @import("reentrant_arg_iterator.zig");
 const Option = @import("option.zig").Option;
+const Parser = @import("parser.zig").Parser;
 
 pub const std_options: std.Options = .{
     .log_level = .debug,
@@ -18,7 +19,7 @@ const dryrun_option: Option = .{
 };
 
 fn iterateOverArgs(fn_ptr: fn (i: u8, [:0]const u8) void) void {
-    var iterator = try std.process.argswithallocator(std.heap.page_allocator);
+    var iterator = try std.process.argsWithAllocator(std.heap.page_allocator);
     defer iterator.deinit();
     var i: u8 = 0;
     _ = iterator.next();
@@ -32,6 +33,19 @@ test "iterate over args" {
     _ = coco;
 }
 
+pub fn main() void {
+    const iterator = try std.process.argsWithAllocator(std.heap.page_allocator);
+    var p: Parser = Parser.init(iterator);
+    while (p.nextShort('v')) |value| {
+        if (value.len > 0) {
+            std.debug.print("found flag with value: {s}\n", .{value});
+        } else {
+            std.debug.print("found flag with no value\n", .{});
+        }
+    } else {
+        std.debug.print("end of arguments reached\n", .{});
+    }
+}
 // fn matchOption(arg: Arg) void {
 // //     for (options) |option| {
 // //         if (option.processArg(arg)) break;
