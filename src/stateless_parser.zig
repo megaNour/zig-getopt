@@ -59,6 +59,14 @@ pub const Option = struct {
         };
     }
 
+    pub fn count(self: *Option) u8 {
+        var aggregate: u8 = 0;
+        while (self.next()) |found| {
+            aggregate +|= found[0];
+        }
+        return aggregate;
+    }
+
     pub fn next(self: *Option) ?[]const u8 {
         while (self.iter.next()) |arg| {
             if (arg.len < 2) {
