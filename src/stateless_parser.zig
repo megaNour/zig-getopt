@@ -2,10 +2,12 @@ const std = @import("std");
 const ArgIterator = std.process.ArgIterator;
 
 const ParsingError = error{
-    MissingValue,
-    ForbiddenValue,
-    ForbiddenFlagPosition,
+    ForbiddenChain,
     ForbiddenEqualPosition,
+    ForbiddenFlagPosition,
+    ForbiddenValue,
+    ForbiddenValueAtPosition,
+    MissingValue,
 };
 
 pub const Positional = struct {
@@ -78,52 +80,33 @@ pub const Option = struct {
                         continue;
                     }
                 } else { // flag chain
-                    var flag_counter: u8 = 0;
                     for (arg[1..], 1..) |c, i| {
-                        if (i == 1 and c == '=') {
+                        if (c == '=') {
+                            if (i > 0) break; // we don't return null, we need to return flag_counter if it is > 0
                             std.log.err("{s}: '=' can only precede a value after a valid flag name. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenEqualPosition), arg });
                             std.process.exit(1);
                         } else if (c != self.short) {
                             continue;
                         } else {
-                            switch (self.req_lvl) {
+                            return switch (self.req_lvl) {
                                 Level.required => {
-                                    if (arg.len > i + 1) {
-                                        if (arg[i + 1] == '=') {
-                                            return self.parseArg(arg[i..]);
-                                        }
-                                    }
-                                    std.log.err("{s}: '{d}' requires an argument. It can be alone or the last one of a flag chain. Got: '{s}'", .{ @errorName(ParsingError.MissingValue), c, arg });
-                                    std.process.exit(1);
+                                    return self.parseArg(arg[1..]);
                                 },
-                                Level.allowed => {
-                                    if (arg.len > i + 1) { // if not last element in chain, maybe a value
-                                        if (arg[i + 1] == '=') { // last element with value
-                                            return self.parseArg(arg[i..]);
-                                        } else if (arg[i + 1] != '=') { // not last element
-                                            std.log.err("{s}: '{d}' can take an argument. It can be alone or the last one of a flag chain. Got: '{s}'", .{ @errorName(ParsingError.MissingValue), c, arg });
-                                            std.process.exit(1);
-                                        }
-                                    } else flag_counter += 1;
-                                    continue; // WARN: temporary before boolean casting implementation
+                                Level.allowed, Level.forbidden => {
+                                    return self.parseRepeatableArgInChain(arg[1..], c);
                                 },
-                                Level.forbidden => {
-                                    if (arg.len == i + 1) {
-                                        flag_counter += 1;
-                                        continue; // WARN: temporary before boolean casting implementation
-
-                                    } else if (arg.len > i + 1 and arg[i + 1] == '=') {
-                                        std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenValue), arg[i .. i + 1], arg });
-                                        std.process.exit(1);
-                                    }
-                                    flag_counter += 1;
-                                    continue; // WARN: temporary before boolean casting implementation
-                                },
-                            }
+                                // Level.forbidden => {
+                                //     if (arg.len == i + 1) {
+                                //         continue; // WARN: temporary before boolean casting implementation
+                                //
+                                //     } else if (arg.len > i + 1 and arg[i + 1] == '=') {
+                                //         std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenValue), arg[i .. i + 1], arg });
+                                //         std.process.exit(1);
+                                //     }
+                                //     continue; // WARN: temporary before boolean casting implementation
+                                // },
+                            };
                         }
-                    }
-                    if (flag_counter > 0) {
-                        return &.{flag_counter};
                     }
                 }
             }
@@ -144,13 +127,48 @@ pub const Option = struct {
                 return if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |i| {
                     if (arg[i + 1 ..].len > 0) return arg[i + 1 ..] else std.log.err("{s}: '{s}' was given with an '=' but no value was provided", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
                     std.process.exit(1);
-                } else "";
+                } else return &.{1};
             },
             Level.forbidden => {
                 if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |pos| {
                     std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenValue), arg[0..pos], arg });
                     std.process.exit(1);
-                } else return "";
+                } else return &.{1};
+            },
+        }
+    }
+
+    /// NOTE: count a repeatable flag. If the flag allows values, It can only be counted or valued in the same flag chain (like '-fffvv')
+    /// We do not verify all flags in the chain are valid, we only verify that very flag.
+    /// So if a poorly written flag comes after a valid one and is never required by the user, the command will not fail.
+    /// ---
+    /// for example: '-vvvff=blah, 'v' will count 'v' 3 if the user asks for v.
+    /// This will only fail if the user requires 'f'.
+    /// (it will fail because 'f' cannot be counted (2) and allow a value in the same chain)
+    /// Since it is lazily checked, if the user does not requires 'f' in the flow of his command, he will not get an error.
+    fn parseRepeatableArgInChain(self: *Option, haystack: []const u8, needle: u8) []const u8 {
+        switch (self.req_lvl) {
+            Level.required => {
+                std.log.err("'parseRepeatableArgInChain' is only for checking flag repetition in a chain. Required value arguments cannot be repeated in a chain as they need to be last.", .{});
+                std.process.exit(1);
+            },
+            Level.allowed => {
+                const needle_count: u8 = @truncate(std.mem.count(u8, haystack, &.{needle}));
+                const valued_count = std.mem.count(u8, haystack, &.{ needle, '=' });
+                return if (needle_count == 0) unreachable else if (needle_count == 1 and valued_count == 1) {
+                    return if (std.mem.indexOfScalarPos(u8, haystack, 1, '=')) |pos| haystack[pos + 1 ..] else unreachable;
+                } else if (needle_count > 1 and valued_count > 0) {
+                    std.log.err("{s}: '{s}' cannot take an count and an argument in the same flag chain. Got: '{s}{s}'", .{ @errorName(ParsingError.ForbiddenChain), &.{needle}, &.{'-'}, haystack });
+                    std.process.exit(1);
+                } else &.{needle_count};
+            },
+            Level.forbidden => {
+                const needle_count: u8 = @truncate(std.mem.count(u8, haystack, &.{needle}));
+                const valued_count = std.mem.count(u8, haystack, &.{ needle, '=' });
+                return if (valued_count > 0) {
+                    std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}{s}'", .{ @errorName(ParsingError.ForbiddenChain), &.{needle}, &.{'-'}, haystack });
+                    std.process.exit(1);
+                } else &.{needle_count};
             },
         }
     }
