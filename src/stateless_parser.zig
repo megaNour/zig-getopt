@@ -2,11 +2,9 @@ const std = @import("std");
 const ArgIterator = std.process.ArgIterator;
 
 const ParsingError = error{
-    ForbiddenChain,
     ForbiddenEqualPosition,
     ForbiddenFlagPosition,
     ForbiddenValue,
-    ForbiddenValueAtPosition,
     MissingValue,
 };
 
@@ -90,21 +88,11 @@ pub const Option = struct {
                         } else {
                             return switch (self.req_lvl) {
                                 Level.required => {
-                                    return self.parseArg(arg[1..]);
+                                    return self.parseFlagChain(arg[1..], c);
                                 },
                                 Level.allowed, Level.forbidden => {
-                                    return self.parseRepeatableArgInChain(arg[1..], c);
+                                    return self.parseFlagChain(arg[1..], c);
                                 },
-                                // Level.forbidden => {
-                                //     if (arg.len == i + 1) {
-                                //         continue; // WARN: temporary before boolean casting implementation
-                                //
-                                //     } else if (arg.len > i + 1 and arg[i + 1] == '=') {
-                                //         std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenValue), arg[i .. i + 1], arg });
-                                //         std.process.exit(1);
-                                //     }
-                                //     continue; // WARN: temporary before boolean casting implementation
-                                // },
                             };
                         }
                     }
@@ -125,7 +113,7 @@ pub const Option = struct {
             },
             Level.allowed => {
                 return if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |i| {
-                    if (arg[i + 1 ..].len > 0) return arg[i + 1 ..] else std.log.err("{s}: '{s}' was given with an '=' but no value was provided", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
+                    if (arg[i + 1 ..].len > 0) return arg[i + 1 ..] else std.log.err("{s}: '{s}' was given with an '=' but no value was provided.", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
                     std.process.exit(1);
                 } else return &.{1};
             },
@@ -138,37 +126,49 @@ pub const Option = struct {
         }
     }
 
-    /// NOTE: count a repeatable flag. If the flag allows values, It can only be counted or valued in the same flag chain (like '-fffvv')
-    /// We do not verify all flags in the chain are valid, we only verify that very flag.
-    /// So if a poorly written flag comes after a valid one and is never required by the user, the command will not fail.
-    /// ---
-    /// for example: '-vvvff=blah, 'v' will count 'v' 3 if the user asks for v.
-    /// This will only fail if the user requires 'f'.
-    /// (it will fail because 'f' cannot be counted (2) and allow a value in the same chain)
-    /// Since it is lazily checked, if the user does not requires 'f' in the flow of his command, he will not get an error.
-    fn parseRepeatableArgInChain(self: *Option, haystack: []const u8, needle: u8) []const u8 {
+    /// The input at this point needs to be a flag chain without leading '-'.
+    /// The needle needs to be guaranteed != '=' and seen before any '='
+    fn parseFlagChain(self: *Option, haystack: []const u8, needle: u8) []const u8 {
         switch (self.req_lvl) {
             Level.required => {
-                std.log.err("'parseRepeatableArgInChain' is only for checking flag repetition in a chain. Required value arguments cannot be repeated in a chain as they need to be last.", .{});
-                std.process.exit(1);
+                if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
+                    if (haystack[pos + 1] == '=') {
+                        return haystack[pos + 2 ..];
+                    } else {
+                        std.log.err("{s}: {s} requires '=' affectation. It can only be last in a flag chain. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                        std.process.exit(1);
+                    }
+                } else unreachable;
             },
             Level.allowed => {
-                const needle_count: u8 = @truncate(std.mem.count(u8, haystack, &.{needle}));
-                const valued_count = std.mem.count(u8, haystack, &.{ needle, '=' });
-                return if (needle_count == 0) unreachable else if (needle_count == 1 and valued_count == 1) {
-                    return if (std.mem.indexOfScalarPos(u8, haystack, 1, '=')) |pos| haystack[pos + 1 ..] else unreachable;
-                } else if (needle_count > 1 and valued_count > 0) {
-                    std.log.err("{s}: '{s}' cannot take an count and an argument in the same flag chain. Got: '{s}{s}'", .{ @errorName(ParsingError.ForbiddenChain), &.{needle}, &.{'-'}, haystack });
-                    std.process.exit(1);
-                } else &.{needle_count};
+                if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
+                    if (haystack.len == pos + 1) {
+                        return &.{1};
+                    } else if (haystack[pos + 1] == '=') {
+                        if (haystack.len == pos + 2) {
+                            std.log.err("{s}: {s} has an empty '=' affectation which is ambiguous. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                            std.process.exit(1);
+                        }
+                        return haystack[pos + 2 ..];
+                    } else {
+                        std.log.err("{s}: {s} supports '=' affectation. It can only be last in a flag chain. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                        std.process.exit(1);
+                    }
+                } else unreachable;
+                std.log.err("'parseFlagChain' is only for checking flag repetition in a chain. Only args without value do repeat in the same flag chain.", .{});
+                std.process.exit(1);
             },
             Level.forbidden => {
-                const needle_count: u8 = @truncate(std.mem.count(u8, haystack, &.{needle}));
-                const valued_count = std.mem.count(u8, haystack, &.{ needle, '=' });
-                return if (valued_count > 0) {
-                    std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}{s}'", .{ @errorName(ParsingError.ForbiddenChain), &.{needle}, &.{'-'}, haystack });
-                    std.process.exit(1);
-                } else &.{needle_count};
+                var n: u8 = 0;
+                for (haystack, 0..) |c, i| {
+                    if (c == needle) {
+                        n += 1;
+                    } else if (c == '=' and haystack[i - 1] == needle) {
+                        std.log.err("{s}: {s} does not support '=' affectation. Got: '-{s}'", .{ @errorName(ParsingError.ForbiddenValue), &.{needle}, haystack });
+                        std.process.exit(1);
+                    }
+                }
+                return &.{n};
             },
         }
     }

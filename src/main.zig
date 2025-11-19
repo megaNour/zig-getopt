@@ -43,7 +43,10 @@ pub fn main() void {
         std.debug.print("found verbose level {d}!\n", .{flag[0]});
     }
     while (myOptionalOpt.next()) |color| {
-        std.debug.print("found color flag! Data is: {d}\n", .{color[0]});
+        if (color.len == 1)
+            std.debug.print("found color flag! Data is: {d}\n", .{color[0]})
+        else
+            std.debug.print("found color flag! Data is: {s}\n", .{color});
     }
     while (myValuedOpt.next()) |data| {
         std.debug.print("found data flag! Data is: {s}\n", .{data});
