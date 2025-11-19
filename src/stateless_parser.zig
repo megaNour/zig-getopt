@@ -114,8 +114,12 @@ pub const Option = struct {
         switch (self.req_lvl) {
             Level.required => {
                 if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |i| {
-                    if (arg[i + 1 ..].len > 0) return arg[i + 1 ..] else std.log.err("{s}: '{s}' requires a value, but none was provided.", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
-                    std.process.exit(1);
+                    if (arg[i + 1 ..].len > 0) {
+                        return arg[i + 1 ..];
+                    } else {
+                        std.log.err("{s}: '{s}' requires a value, but none was provided.", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
+                        std.process.exit(1);
+                    }
                 } else std.log.err("{s}: '{s}' requires a value, but none was provided.", .{ @errorName(ParsingError.MissingValue), arg });
                 std.process.exit(1);
             },
@@ -140,8 +144,16 @@ pub const Option = struct {
         switch (self.req_lvl) {
             Level.required => {
                 if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
-                    if (haystack[pos + 1] == '=') {
-                        return haystack[pos + 2 ..];
+                    if (haystack.len >= pos + 2) {
+                        if (haystack.len == pos + 2) {
+                            std.log.err("{s}: {s} requires a non-empty value. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                            std.process.exit(1);
+                        } else if (haystack[pos + 1] == '=') {
+                            return haystack[pos + 2 ..];
+                        } else {
+                            std.log.err("{s}: {s} only takes a non-empty value. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                            std.process.exit(1);
+                        }
                     } else {
                         std.log.err("{s}: {s} requires '=' affectation. It can only be last in a flag chain. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
                         std.process.exit(1);
