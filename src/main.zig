@@ -36,10 +36,17 @@ const option = @import("stateless_parser.zig");
 
 pub fn main() void {
     const iterator = try std.process.argsWithAllocator(std.heap.page_allocator);
-    const longs = [_][]const u8{ "verbose", "ver" };
-    var myOpt = option.Option.init(iterator, 'v', &longs, option.Level.forbidden, "get useful debug output");
-    while (myOpt.next()) |cap| {
-        std.debug.print("found: {s}\n", .{cap});
+    var myOpt = option.Option.init(iterator, 'v', &.{ "verbose", "ve", "ver", "verb" }, option.Level.forbidden, "get useful debug output");
+    var myValuedOpt = option.Option.init(iterator, 'd', &.{ "data", "da" }, option.Level.allowed, "store value in there");
+    while (myOpt.next()) |flag| {
+        std.debug.print("found verbose level {d}!\n", .{flag[0]});
+    }
+    while (myValuedOpt.next()) |data| {
+        std.debug.print("found data flag! Data is: {s}\n", .{data});
+    }
+    var myPos = option.Positional.init(iterator);
+    while (myPos.next()) |pos| {
+        std.debug.print("found pos: {s}\n", .{pos});
     }
 }
 // fn matchOption(arg: Arg) void {

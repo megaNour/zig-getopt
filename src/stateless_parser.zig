@@ -78,54 +78,79 @@ pub const Option = struct {
                         continue;
                     }
                 } else { // flag chain
+                    var flag_counter: u8 = 0;
                     for (arg[1..], 1..) |c, i| {
-                        if (c == '=') {
-                            std.debug.panic("{}: '=' can only precede a value after a valid flag name. Got: {s}", .{ ParsingError.ForbiddenEqualPosition, arg });
+                        if (i == 1 and c == '=') {
+                            std.log.err("{s}: '=' can only precede a value after a valid flag name. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenEqualPosition), arg });
+                            std.process.exit(1);
                         } else if (c != self.short) {
                             continue;
-                        } else switch (self.req_lvl) {
-                            Level.required => {
-                                if (arg.len > i + 1) {
-                                    if (arg[i + 1] == '=') {
-                                        return self.parseArg(arg[i..]);
+                        } else {
+                            switch (self.req_lvl) {
+                                Level.required => {
+                                    if (arg.len > i + 1) {
+                                        if (arg[i + 1] == '=') {
+                                            return self.parseArg(arg[i..]);
+                                        }
                                     }
-                                }
-                                std.debug.panic("{}: '{d}' requires an argument. It can be alone or the last one of a flag chain. Got: {s}", .{ ParsingError.MissingValue, c, arg });
-                            },
-                            Level.allowed => {
-                                if (arg.len > i + 1) {
-                                    if (arg[i + 1] == '=') {
-                                        return self.parseArg(arg[i..]);
-                                    } else if (arg[i + 1] != '=') {
-                                        std.debug.panic("{}: '{d}' can take an argument. It can be alone or the last one of a flag chain. Got: {s}", .{ ParsingError.MissingValue, c, arg });
+                                    std.log.err("{s}: '{d}' requires an argument. It can be alone or the last one of a flag chain. Got: '{s}'", .{ @errorName(ParsingError.MissingValue), c, arg });
+                                    std.process.exit(1);
+                                },
+                                Level.allowed => {
+                                    if (arg.len > i + 1) { // if not last element in chain, maybe a value
+                                        if (arg[i + 1] == '=') { // last element with value
+                                            return self.parseArg(arg[i..]);
+                                        } else if (arg[i + 1] != '=') { // not last element
+                                            std.log.err("{s}: '{d}' can take an argument. It can be alone or the last one of a flag chain. Got: '{s}'", .{ @errorName(ParsingError.MissingValue), c, arg });
+                                            std.process.exit(1);
+                                        }
+                                    } else flag_counter += 1;
+                                    continue; // WARN: temporary before boolean casting implementation
+                                },
+                                Level.forbidden => {
+                                    if (arg.len == i + 1) {
+                                        flag_counter += 1;
+                                        continue; // WARN: temporary before boolean casting implementation
+
+                                    } else if (arg.len > i + 1 and arg[i + 1] == '=') {
+                                        std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenValue), arg[i .. i + 1], arg });
+                                        std.process.exit(1);
                                     }
-                                } else return self.parseArg(arg[i..]);
-                            },
-                            Level.forbidden => {
-                                return self.parseArg(arg[i..]);
-                            },
+                                    flag_counter += 1;
+                                    continue; // WARN: temporary before boolean casting implementation
+                                },
+                            }
                         }
+                    }
+                    if (flag_counter > 0) {
+                        return &.{flag_counter};
                     }
                 }
             }
         } else return null;
     }
 
-    /// Here we consider we don't receive empty args.
+    /// At this point we have a string starting with a valid target flag.
     fn parseArg(self: *Option, arg: []const u8) ?[]const u8 {
         switch (self.req_lvl) {
-            Level.forbidden => {
-                return if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |pos| std.debug.panic("{}: {s} cannot take an argument. Got: {s}", .{ ParsingError.ForbiddenValue, arg[0..pos], arg }) else "";
-            },
-            Level.allowed => {
-                if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |i| {
-                    return if (arg[i + 1 ..].len > 0) arg[i + 1 ..] else std.debug.panic("{}: {s} was given with an '=' but no value was provided", .{ ParsingError.MissingValue, arg[0..i] });
-                } else return "";
-            },
             Level.required => {
                 if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |i| {
-                    return if (arg[i + 1 ..].len > 0) arg[i + 1 ..] else std.debug.panic("{}: {s} requires a value, but none was provided.", .{ ParsingError.MissingValue, arg[0..i] });
-                } else return std.debug.panic("{}: {s} requires a value, but none was provided.", .{ ParsingError.MissingValue, arg });
+                    if (arg[i + 1 ..].len > 0) return arg[i + 1 ..] else std.log.err("{s}: '{s}' requires a value, but none was provided.", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
+                    std.process.exit(1);
+                } else std.log.err("{s}: '{s}' requires a value, but none was provided.", .{ @errorName(ParsingError.MissingValue), arg });
+                std.process.exit(1);
+            },
+            Level.allowed => {
+                return if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |i| {
+                    if (arg[i + 1 ..].len > 0) return arg[i + 1 ..] else std.log.err("{s}: '{s}' was given with an '=' but no value was provided", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
+                    std.process.exit(1);
+                } else "";
+            },
+            Level.forbidden => {
+                if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |pos| {
+                    std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenValue), arg[0..pos], arg });
+                    std.process.exit(1);
+                } else return "";
             },
         }
     }
