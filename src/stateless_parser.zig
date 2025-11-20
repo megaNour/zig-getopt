@@ -85,8 +85,7 @@ pub const Option = struct {
                 } else { // flag chain
                     for (arg[1..], 1..) |c, i| {
                         if (c == '=') {
-                            if (i > 0) break // we don't return null, we need to return flag_counter if it is > 0
-                            else {
+                            if (i > 0) return null else {
                                 std.log.err(
                                     "{s}: '=' can only precede a value after a valid flag name. Got: '{s}'",
                                     .{ @errorName(ParsingError.ForbiddenEqualPosition), arg },
