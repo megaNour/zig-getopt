@@ -44,7 +44,8 @@ pub fn main() void {
     while (myOpt.next()) |flag| {
         std.debug.print("found verbose level {d}!\n", .{flag[0]});
     }
-    std.debug.print("aggregate them: {d}!\n", .{aggregateMyOpt.count()});
+    const aggreg = aggregateMyOpt.count();
+    if (aggreg > 0) std.debug.print("aggregate them: {d}!\n", .{aggreg});
     while (myOpt.next()) |flag| {
         std.debug.print("found verbose level {d}!\n", .{flag[0]});
     }

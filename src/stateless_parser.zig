@@ -1,7 +1,7 @@
 const std = @import("std");
 const ArgIterator = std.process.ArgIterator;
 
-const ParsingError = error{
+pub const ParsingError = error{
     ForbiddenEqualPosition,
     ForbiddenFlagPosition,
     ForbiddenValue,

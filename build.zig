@@ -87,7 +87,7 @@ pub fn build(b: *std.Build) void {
     // install prefix when running `zig build` (i.e. when executing the default
     // step). By default the install prefix is `zig-out/` but can be overridden
     // by passing `--prefix` or `-p`.
-    b.installArtifact(exe);
+    // b.installArtifact(exe);
 
     // This creates a top level step. Top level steps have a name and can be
     // invoked by name when running `zig build` (e.g. `zig build run`).
@@ -107,7 +107,7 @@ pub fn build(b: *std.Build) void {
 
     // By making the run step depend on the default step, it will be run from the
     // installation directory rather than directly from within the cache directory.
-    run_cmd.step.dependOn(b.getInstallStep());
+    // run_cmd.step.dependOn(b.getInstallStep());
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
@@ -153,4 +153,20 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
+
+    const test_statless_count = b.addRunArtifact(exe);
+    test_statless_count.addArgs(&.{ "-v", "-vv", "-v" });
+    test_step.dependOn(&test_statless_count.step);
+
+    const test_statless_allowed_value = b.addRunArtifact(exe);
+    test_statless_allowed_value.addArgs(&.{ "-f", "-f=my_file" });
+    test_step.dependOn(&test_statless_allowed_value.step);
+
+    const test_statless_required_value = b.addRunArtifact(exe);
+    test_statless_required_value.addArgs(&.{"-d=mandatory"});
+    test_step.dependOn(&test_statless_required_value.step);
+
+    // const test_statless_mix = b.addRunArtifact(exe);
+    // test_statless_mix.addArgs(&.{ "-v", "-alif", "ba", "-vvvd=ta", "-vc=tha", "-d=jeem", "--", "-vv" });
+    // test_step.dependOn(&test_statless_mix.step);
 }
