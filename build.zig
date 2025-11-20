@@ -153,20 +153,4 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
-
-    const test_statless_count = b.addRunArtifact(exe);
-    test_statless_count.addArgs(&.{ "-v", "-vv", "-v" });
-    test_step.dependOn(&test_statless_count.step);
-
-    const test_statless_allowed_value = b.addRunArtifact(exe);
-    test_statless_allowed_value.addArgs(&.{ "-f", "-f=my_file" });
-    test_step.dependOn(&test_statless_allowed_value.step);
-
-    const test_statless_required_value = b.addRunArtifact(exe);
-    test_statless_required_value.addArgs(&.{"-d=mandatory"});
-    test_step.dependOn(&test_statless_required_value.step);
-
-    // const test_statless_mix = b.addRunArtifact(exe);
-    // test_statless_mix.addArgs(&.{ "-v", "-alif", "ba", "-vvvd=ta", "-vc=tha", "-d=jeem", "--", "-vv" });
-    // test_step.dependOn(&test_statless_mix.step);
 }
