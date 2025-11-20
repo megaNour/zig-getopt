@@ -75,22 +75,24 @@ pub const Option = struct {
                 if (arg[1] == '-') { // longs or term
                     if (arg.len == 2) {
                         return null;
-                    } else {
-                        if (self.longs) |longs| {
-                            for (longs) |l| {
-                                if (std.mem.eql(u8, arg[2..], l)) {
-                                    return self.parseArg(arg[2..]);
-                                }
+                    } else if (self.longs) |longs| {
+                        for (longs) |l| {
+                            if (std.mem.eql(u8, arg[2..], l)) {
+                                return self.parseArg(arg[2..]);
                             }
                         }
-                        continue;
-                    }
+                    } else continue;
                 } else { // flag chain
                     for (arg[1..], 1..) |c, i| {
                         if (c == '=') {
-                            if (i > 0) break; // we don't return null, we need to return flag_counter if it is > 0
-                            std.log.err("{s}: '=' can only precede a value after a valid flag name. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenEqualPosition), arg });
-                            std.process.exit(1);
+                            if (i > 0) break // we don't return null, we need to return flag_counter if it is > 0
+                            else {
+                                std.log.err(
+                                    "{s}: '=' can only precede a value after a valid flag name. Got: '{s}'",
+                                    .{ @errorName(ParsingError.ForbiddenEqualPosition), arg },
+                                );
+                                std.process.exit(1);
+                            }
                         } else if (c != self.short) {
                             continue;
                         } else {
@@ -117,21 +119,37 @@ pub const Option = struct {
                     if (arg[i + 1 ..].len > 0) {
                         return arg[i + 1 ..];
                     } else {
-                        std.log.err("{s}: '{s}' requires a value, but none was provided.", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
+                        std.log.err(
+                            "{s}: '{s}' requires a value, but none was provided.",
+                            .{ @errorName(ParsingError.MissingValue), arg[0..i] },
+                        );
                         std.process.exit(1);
                     }
-                } else std.log.err("{s}: '{s}' requires a value, but none was provided.", .{ @errorName(ParsingError.MissingValue), arg });
+                } else std.log.err(
+                    "{s}: '{s}' requires a value, but none was provided.",
+                    .{ @errorName(ParsingError.MissingValue), arg },
+                );
                 std.process.exit(1);
             },
             Level.allowed => {
                 return if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |i| {
-                    if (arg[i + 1 ..].len > 0) return arg[i + 1 ..] else std.log.err("{s}: '{s}' was given with an '=' but no value was provided.", .{ @errorName(ParsingError.MissingValue), arg[0..i] });
+                    if (arg[i + 1 ..].len > 0) {
+                        return arg[i + 1 ..];
+                    } else {
+                        std.log.err(
+                            "{s}: '{s}' was given with an '=' but no value was provided.",
+                            .{ @errorName(ParsingError.MissingValue), arg[0..i] },
+                        );
+                    }
                     std.process.exit(1);
                 } else return &.{1};
             },
             Level.forbidden => {
                 if (std.mem.indexOfScalarPos(u8, arg, 1, '=')) |pos| {
-                    std.log.err("{s}: '{s}' cannot take an argument. Got: '{s}'", .{ @errorName(ParsingError.ForbiddenValue), arg[0..pos], arg });
+                    std.log.err(
+                        "{s}: '{s}' cannot take an argument. Got: '{s}'",
+                        .{ @errorName(ParsingError.ForbiddenValue), arg[0..pos], arg },
+                    );
                     std.process.exit(1);
                 } else return &.{1};
             },
@@ -145,17 +163,27 @@ pub const Option = struct {
             Level.required => {
                 if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
                     if (haystack.len >= pos + 2) {
-                        if (haystack.len == pos + 2) {
-                            std.log.err("{s}: {s} requires a non-empty value. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
-                            std.process.exit(1);
-                        } else if (haystack[pos + 1] == '=') {
+                        if (haystack[pos + 1] == '=') {
+                            if (haystack.len == pos + 2) {
+                                std.log.err(
+                                    "{s}: '{s}' requires a non-empty value. Got: '-{s}'.",
+                                    .{ @errorName(ParsingError.MissingValue), &.{needle}, haystack },
+                                );
+                                std.process.exit(1);
+                            }
                             return haystack[pos + 2 ..];
                         } else {
-                            std.log.err("{s}: {s} only takes a non-empty value. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                            std.log.err(
+                                "{s}: '{s}' requires '=' affectation. It can only be last in a flag chain. Got: '-{s}'.",
+                                .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack },
+                            );
                             std.process.exit(1);
                         }
                     } else {
-                        std.log.err("{s}: {s} requires '=' affectation. It can only be last in a flag chain. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                        std.log.err(
+                            "{s}: '{s}' requires '=' affectation. Got: '-{s}'.",
+                            .{ @errorName(ParsingError.MissingValue), &.{needle}, haystack },
+                        );
                         std.process.exit(1);
                     }
                 } else unreachable;
@@ -166,16 +194,25 @@ pub const Option = struct {
                         return &.{1};
                     } else if (haystack[pos + 1] == '=') {
                         if (haystack.len == pos + 2) {
-                            std.log.err("{s}: {s} has an empty '=' affectation which is ambiguous. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                            std.log.err(
+                                "{s}: {s} has an empty '=' affectation which is ambiguous. Got: '-{s}'.",
+                                .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack },
+                            );
                             std.process.exit(1);
                         }
                         return haystack[pos + 2 ..];
                     } else {
-                        std.log.err("{s}: {s} supports '=' affectation. It can only be last in a flag chain. Got: '-{s}'.", .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack });
+                        std.log.err(
+                            "{s}: {s} supports '=' affectation. It can only be last in a flag chain. Got: '-{s}'.",
+                            .{ @errorName(ParsingError.ForbiddenFlagPosition), &.{needle}, haystack },
+                        );
                         std.process.exit(1);
                     }
                 } else unreachable;
-                std.log.err("'parseFlagChain' is only for checking flag repetition in a chain. Only args without value do repeat in the same flag chain.", .{});
+                std.log.err(
+                    "'parseFlagChain' is only for checking flag repetition in a chain. {s}",
+                    .{"Only args without value do repeat in the same flag chain."},
+                );
                 std.process.exit(1);
             },
             Level.forbidden => {
@@ -184,7 +221,10 @@ pub const Option = struct {
                     if (c == needle) {
                         n += 1;
                     } else if (c == '=' and haystack[i - 1] == needle) {
-                        std.log.err("{s}: {s} does not support '=' affectation. Got: '-{s}'", .{ @errorName(ParsingError.ForbiddenValue), &.{needle}, haystack });
+                        std.log.err(
+                            "{s}: {s} does not support '=' affectation. Got: '-{s}'",
+                            .{ @errorName(ParsingError.ForbiddenValue), &.{needle}, haystack },
+                        );
                         std.process.exit(1);
                     }
                 }

@@ -40,6 +40,7 @@ pub fn main() void {
     var aggregateMyOpt = myOpt;
     var myOptionalOpt = option.Option.init(iterator, 'c', &.{ "color", "col" }, option.Level.allowed, "store value in there");
     var myValuedOpt = option.Option.init(iterator, 'd', &.{ "data", "dat" }, option.Level.required, "store value in there");
+
     while (myOpt.next()) |flag| {
         std.debug.print("found verbose level {d}!\n", .{flag[0]});
     }
@@ -61,6 +62,7 @@ pub fn main() void {
         std.debug.print("found pos: {s}\n", .{pos});
     }
 }
+
 // fn matchOption(arg: Arg) void {
 // //     for (options) |option| {
 // //         if (option.processArg(arg)) break;
