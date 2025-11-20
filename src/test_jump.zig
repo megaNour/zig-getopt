@@ -4,11 +4,11 @@ const jump = @import("jump.zig");
 const expect = std.testing.expect;
 
 pub const StringIterator = struct {
-    stock: []const [:0]const u8,
+    stock: []const []const u8,
     pos: usize = 0,
 
-    pub fn next(self: *StringIterator) ?[:0]const u8 {
-        var res: ?[:0]const u8 = null;
+    pub fn next(self: *StringIterator) ?[]const u8 {
+        var res: ?[]const u8 = null;
         if (self.pos < self.stock.len) {
             res = self.stock[self.pos];
             self.pos += 1;

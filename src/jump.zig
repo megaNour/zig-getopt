@@ -9,7 +9,11 @@ pub const ParsingError = error{
 };
 
 pub fn OverPos(comptime T: type) type {
-    comptime if (@TypeOf(T.next) != fn (*T) ?[:0]const u8) @compileError("T.next must match: fn(self: *T) ?[:0]const u8");
+    comptime if (@TypeOf(T.next) == fn (*T) ?[:0]const u8 or @TypeOf(T.next) == fn (*T) ?[]const u8) {
+        // fine
+    } else {
+        @compileError("T.next must match: fn(self: *T) ?[]const u8 or fn(self: *T) ?[:0]const u8");
+    };
     return struct {
         iter: T,
 
@@ -40,7 +44,11 @@ pub const Level = enum(u2) {
 };
 
 pub fn Over(comptime T: type) type {
-    comptime if (@TypeOf(T.next) != fn (*T) ?[:0]const u8) @compileError("T.next must match: fn(self: *T) ?[:0]const u8");
+    comptime if (@TypeOf(T.next) == fn (*T) ?[:0]const u8 or @TypeOf(T.next) == fn (*T) ?[]const u8) {
+        // fine
+    } else {
+        @compileError("T.next must match: fn(self: *T) ?[]const u8 or fn(self: *T) ?[:0]const u8");
+    };
     return struct {
         iter: T,
         short: ?u8,
@@ -72,7 +80,7 @@ pub fn Over(comptime T: type) type {
             return aggregate;
         }
 
-        pub fn next(self: *@This()) ?[]const u8 {
+        pub fn next(self: *@This()) ParsingError!?[]const u8 {
             while (self.iter.next()) |arg| {
                 if (arg.len < 2) {
                     continue; // positional
