@@ -9,6 +9,7 @@ pub const ParsingError = error{
 };
 
 pub fn OverPos(comptime T: type) type {
+    comptime if (@TypeOf(T.next) != fn (*T) ?[:0]const u8) @compileError("T.next must match: fn(self: *T) ?[:0]const u8");
     return struct {
         iter: T,
 
@@ -39,6 +40,7 @@ pub const Level = enum(u2) {
 };
 
 pub fn Over(comptime T: type) type {
+    comptime if (@TypeOf(T.next) != fn (*T) ?[:0]const u8) @compileError("T.next must match: fn(self: *T) ?[:0]const u8");
     return struct {
         iter: T,
         short: ?u8,

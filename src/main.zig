@@ -1,5 +1,6 @@
 const std = @import("std");
-const option = @import("stateless_parser.zig");
+const ArgIterator = std.process.ArgIterator;
+const jump = @import("jump.zig");
 // const reentrant = @import("reentrant_arg_iterator.zig");
 // const Option = @import("option.zig").Option;
 // const Parser = @import("parser.zig").Parser;
@@ -36,10 +37,10 @@ const option = @import("stateless_parser.zig");
 
 pub fn main() void {
     const iterator = try std.process.argsWithAllocator(std.heap.page_allocator);
-    var myOpt = option.Option.init(iterator, 'v', &.{ "verbose", "ver" }, option.Level.forbidden, "get useful debug output");
+    var myOpt = jump.Over(ArgIterator).init(iterator, 'v', &.{ "verbose", "ver" }, .forbidden, "get useful debug output");
     var aggregateMyOpt = myOpt;
-    var myOptionalOpt = option.Option.init(iterator, 'c', &.{ "color", "col" }, option.Level.allowed, "store value in there");
-    var myValuedOpt = option.Option.init(iterator, 'd', &.{ "data", "dat" }, option.Level.required, "store value in there");
+    var myOptionalOpt = jump.Over(ArgIterator).init(iterator, 'c', &.{ "color", "col" }, .allowed, "store value in there");
+    var myValuedOpt = jump.Over(ArgIterator).init(iterator, 'd', &.{ "data", "dat" }, .required, "store value in there");
 
     while (myOpt.next()) |flag| {
         std.debug.print("found verbose level {d}!\n", .{flag[0]});
@@ -58,7 +59,7 @@ pub fn main() void {
     while (myValuedOpt.next()) |data| {
         std.debug.print("found data flag! Data is: {s}\n", .{data});
     }
-    var myPos = option.Positional.init(iterator);
+    var myPos = jump.OverPos(ArgIterator).init(iterator);
     while (myPos.next()) |pos| {
         std.debug.print("found pos: {s}\n", .{pos});
     }
