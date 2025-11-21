@@ -2,6 +2,8 @@ const std = @import("std");
 const ArgIterator = std.process.ArgIterator;
 const jump = @import("jump.zig");
 const expect = std.testing.expect;
+const expectError = std.testing.expectError;
+const ParsingError = jump.ParsingError;
 
 pub const StringIterator = struct {
     stock: []const []const u8,
@@ -18,26 +20,79 @@ pub const StringIterator = struct {
 };
 
 test "jump flags with forbidden value affectation" {
+    // Simulate argv
     const iterator = StringIterator{ .stock = &.{ "--verbose", "alif", "--ba", "-ta", "-vv", "-av", "--", "-vvv" } };
-    //                                             |   1                                2       1    --      3|
-    //                                             |————————————————————————— 4 —————————————————————|—— 3 ———|
+    //                                             |    1                               2       1    --      3|
+    //                                             |————————————————————————— 4 —————————————————————||—— 3 ——|
+    // declare a jumper
     var jumper = jump.Over(StringIterator).init(iterator, 'v', &.{"verbose"}, .forbidden, "verbose logs");
-    var copyOfJumper = jumper; // start from the same point
-    try expect(4 == copyOfJumper.count());
-    try expect(1 == jumper.next().?[0]);
-    try expect(2 == jumper.next().?[0]);
-    try expect(1 == jumper.next().?[0]);
-    try expect(null == jumper.next()); // unlike next(), count() already hit it and swallowed it
-    try expect(3 == jumper.next().?[0]);
-    try expect(3 == copyOfJumper.count());
+    // define another starting from the same point
+    var copyOfJumper = jumper;
+    // get your verbose level
+    try expect(4 == try copyOfJumper.count());
+    // or read the elements one by one
+    try expect(1 == (try jumper.next()).?[0]);
+    try expect(2 == (try jumper.next()).?[0]);
+    try expect(1 == (try jumper.next()).?[0]);
+
+    // hit the '--' terminator
+    try expect(null == try jumper.next());
+    try expect(3 == (try jumper.next()).?[0]);
+
+    // count() already did consume it so you can count the next segment directly
+    try expect(3 == try copyOfJumper.count());
+
+    // reach the end
+    try expect(null == try jumper.next());
 }
 
 test "jump flags with wrong value affectation" {
-    const iterator = StringIterator{ .stock = &.{ "--verbose=a", "alif", "--ba", "-ta", "-vv=", "-av", "--", "-v=vv" } };
+    const iterator = StringIterator{ .stock = &.{ "--verbose=a", "alif", "--ba", "-ta", "-vv=", "-av", "-v=vv" } };
     var jumper = jump.Over(StringIterator).init(iterator, 'v', &.{"verbose"}, .forbidden, "verbose logs");
-    std.debug.print("{any}", .{jumper.next().?});
-    // try expect(2 == jumper.next().?[0]);
-    // try expect(1 == jumper.next().?[0]);
-    // try expect(null == jumper.next());
-    // try expect(3 == jumper.next().?[0]);
+
+    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "--verbose=a"));
+
+    // You can still continue parsing
+    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-vv="));
+
+    try expect(1 == (try jumper.next()).?[0]); // '-av'
+
+    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-v=vv"));
+}
+
+test "jump failure provides debug hints" {
+    const iterator = StringIterator{ .stock = &.{ "-v", "-v=123", "-abcdefghijklmnopqrstuv=very_long_option_name_is_here_for_you" } };
+    var jumper = jump.Over(StringIterator).init(iterator, 'v', &.{"verbose"}, .forbidden, "verbose logs");
+
+    // success case
+    try expect(1 == (try jumper.next()).?[0]);
+    // no error, no debug hint
+    try expect(jumper.debug_hint.len == 0);
+
+    // failure case
+    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-v=123"));
+
+    // hints are truncated to not go over 32 chars
+    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-abcdefghijklmnopqrstuv=very_..."));
+}
+
+test "jump flags with allowed value affectation" {
+    const iterator = StringIterator{ .stock = &.{ "-vc=auto", "-vvvc", "-bac=", "-cta" } };
+    var jumper = jump.Over(StringIterator).init(iterator, 'c', &.{"color"}, .allowed, "activate colored output. Default is auto.");
+
+    try expect(std.mem.eql(u8, (try jumper.next()).?, "auto"));
+    try expect(1 == (try jumper.next()).?[0]);
+
+    // '=' must be followed by a value, it is too ambiguous to interpret otherwise.
+    try expectError(ParsingError.MissingValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-bac="));
+
+    // It also can't be not last of a flag chain
+    try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-cta"));
 }
