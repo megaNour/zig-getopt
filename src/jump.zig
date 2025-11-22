@@ -8,7 +8,25 @@ pub const ParsingError = error{
     MissingValue,
 };
 
-pub fn OverPos(comptime T: type) type {
+/// This provides the centralized 'smart' behavior and flexibility people expect.
+pub fn Registry(comptime T: type) type {
+    return struct {
+        jumpers: []T,
+
+        /// If an arg starts with '-', this loops over all jumpers until it matches one or invalidates the arg.
+        pub fn validate() ParsingError!void {}
+        /// Since it knows all jumpers, it can also aggregate help.
+        pub fn help() ParsingError!void {}
+        /// This is the reliable way to get positional arguments if you write your flag values without '='
+        pub fn nextPos() ParsingError!?[]const u8 {}
+    };
+}
+
+/// This is the Jump original way. No fat loop to decide if this is a positional or value.
+/// You can only use this if you promise to always put '=' after your option values, never ' '.
+/// Although it allows lazy and parallel parsing, this is not about performance.
+/// It's about giving the user total control over: how and when he aggregates, casts or handles errors without allocation.
+pub fn OverPosLean(comptime T: type) type {
     comptime if (@TypeOf(T.next) == fn (*T) ?[:0]const u8 or @TypeOf(T.next) == fn (*T) ?[]const u8) {
         // fine
     } else {
