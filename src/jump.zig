@@ -172,13 +172,13 @@ pub fn Over(comptime T: type) type {
             switch (self.req_lvl) {
                 Level.required => {
                     if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
-                        if (haystack.len >= pos + 3) {
-                            if (haystack[pos + 2] == '=') {
-                                if (haystack.len == pos + 3) {
+                        if (haystack.len >= pos + 2) {
+                            if (haystack[pos + 1] == '=') {
+                                if (haystack.len == pos + 1) {
                                     self.hint(haystack);
                                     return ParsingError.MissingValue;
                                 }
-                                return haystack[pos + 3 ..];
+                                return haystack[pos + 2 ..];
                             } else {
                                 self.hint(haystack);
                                 return ParsingError.ForbiddenFlagPosition;

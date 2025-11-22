@@ -96,3 +96,12 @@ test "jump flags with allowed value affectation" {
     try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
     try expect(std.mem.eql(u8, jumper.debug_hint, "-cta"));
 }
+
+test "jump flags with required value affectation" {
+    const iterator = StringIterator{ .stock = &.{ "-d=alif", "-vd=ba", "-d", "-d=", "-dv" } };
+    var jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
+
+    // restricted is close to allowed, it can't be in the middle of a flag chain or take an empty argument.
+    std.debug.print("arg: {s}", .{(try jumper.next()).?});
+    // try expect(std.mem.eql(u8, (try jumper.next()).?, "alif"));
+}
