@@ -51,16 +51,16 @@ test "jump flags with wrong value affectation" {
     var jumper = jump.Over(StringIterator).init(iterator, 'v', &.{"verbose"}, .forbidden, "verbose logs");
 
     try expectError(ParsingError.ForbiddenValue, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "--verbose=a"));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "--verbose=a"));
 
     // You can still continue parsing
     try expectError(ParsingError.ForbiddenValue, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-vv="));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-vv="));
 
     try expect(1 == (try jumper.next()).?[0]); // '-av'
 
     try expectError(ParsingError.ForbiddenValue, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-v=vv"));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-v=vv"));
 }
 
 test "jump failure provides debug hints" {
@@ -70,15 +70,15 @@ test "jump failure provides debug hints" {
     // success case
     try expect(1 == (try jumper.next()).?[0]);
     // no error, no debug hint
-    try expect(jumper.debug_hint.len == 0);
+    try expect(jumper.diag.debug_hint.len == 0);
 
     // failure case
     try expectError(ParsingError.ForbiddenValue, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-v=123"));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-v=123"));
 
     // hints are truncated to not go over 32 chars
     try expectError(ParsingError.ForbiddenValue, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-abcdefghijklmnopqrstuv=very_..."));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-abcdefghijklmnopqrstuv=very_..."));
 }
 
 test "jump flags with allowed value affectation" {
@@ -94,7 +94,7 @@ test "jump flags with allowed value affectation" {
 
     // It also cannot be last of a flag chain
     try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-cta"));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-cta"));
 }
 
 test "jump flags with required value affectation" {
@@ -107,7 +107,7 @@ test "jump flags with required value affectation" {
     try expect(std.mem.eql(u8, (try jumper.next()).?, "va"));
 
     try expectError(ParsingError.MissingValue, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-d"));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-d"));
 
     // '=' with no value results in an emtpy string. Be it a short or long flag
     try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
@@ -115,5 +115,5 @@ test "jump flags with required value affectation" {
 
     // It also cannot be last of a flag chain
     try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-dv"));
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-dv"));
 }

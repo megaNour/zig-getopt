@@ -10,16 +10,19 @@ pub const ParsingError = error{
 
 /// This provides the centralized 'smart' behavior and flexibility people expect.
 pub fn Registry(comptime T: type) type {
-    return struct {
+    const this: Registry(T) = struct {
         jumpers: []T,
+        diag: Diag = Diag{ .debug_buf = undefined, .debug_hint = undefined },
 
         /// If an arg starts with '-', this loops over all jumpers until it matches one or invalidates the arg.
         pub fn validate() ParsingError!void {}
         /// Since it knows all jumpers, it can also aggregate help.
-        pub fn help() ParsingError!void {}
+        pub fn help() ParsingError!?[]const u8 {}
         /// This is the reliable way to get positional arguments if you write your flag values without '='
         pub fn nextPos() ParsingError!?[]const u8 {}
     };
+
+    return this;
 }
 
 /// This is the Jump original way. No fat loop to decide if this is a positional or value.
@@ -61,6 +64,26 @@ pub const Level = enum(u2) {
     required,
 };
 
+pub const Diag: type = struct {
+    debug_buf: [32]u8,
+    debug_hint: []u8,
+
+    pub fn init(self: *Diag) void {
+        self.debug_hint = self.debug_buf[0..0];
+    }
+
+    pub fn hint(self: *Diag, arg: []const u8) void {
+        const max: usize = if (self.debug_buf.len >= arg.len) arg.len else self.debug_buf.len;
+        std.mem.copyForwards(u8, &self.debug_buf, arg[0..max]);
+        if (self.debug_buf.len < arg.len) {
+            self.debug_hint = self.debug_buf[0..self.debug_buf.len];
+            std.mem.copyForwards(u8, self.debug_hint[max - 3 ..], "...");
+        } else {
+            self.debug_hint = self.debug_buf[0..max];
+        }
+    }
+};
+
 pub fn Over(comptime T: type) type {
     comptime if (@TypeOf(T.next) == fn (*T) ?[:0]const u8 or @TypeOf(T.next) == fn (*T) ?[]const u8) {
         // fine
@@ -73,8 +96,7 @@ pub fn Over(comptime T: type) type {
         longs: ?[]const []const u8,
         req_lvl: Level = .forbidden,
         desc: ?[]const u8,
-        debug_buf: [32]u8 = undefined,
-        debug_hint: []u8 = undefined,
+        diag: Diag = Diag{ .debug_hint = undefined, .debug_buf = undefined },
 
         pub fn init(
             arg_iterator: T,
@@ -90,19 +112,8 @@ pub fn Over(comptime T: type) type {
                 .req_lvl = value_requirement_level,
                 .desc = description,
             };
-            this.debug_hint = this.debug_buf[0..0];
+            this.diag.init();
             return this;
-        }
-
-        fn hint(self: *@This(), arg: []const u8) void {
-            const max: usize = if (self.debug_buf.len >= arg.len) arg.len else self.debug_buf.len;
-            std.mem.copyForwards(u8, &self.debug_buf, arg[0..max]);
-            if (self.debug_buf.len < arg.len) {
-                self.debug_hint = self.debug_buf[0..self.debug_buf.len];
-                std.mem.copyForwards(u8, self.debug_hint[max - 3 ..], "...");
-            } else {
-                self.debug_hint = self.debug_buf[0..max];
-            }
         }
 
         pub fn count(self: *@This()) !u8 {
@@ -132,7 +143,7 @@ pub fn Over(comptime T: type) type {
                         for (arg[1..], 1..) |c, i| {
                             if (c == '=') {
                                 if (i > 0) return null else {
-                                    self.hint(arg);
+                                    self.diag.hint(arg);
                                     return ParsingError.ForbiddenEqualPosition;
                                 }
                             } else if (c != self.short) {
@@ -160,7 +171,7 @@ pub fn Over(comptime T: type) type {
                     if (std.mem.indexOfScalarPos(u8, arg, 3, '=')) |i| {
                         return arg[i + 1 ..];
                     } else {
-                        self.hint(arg);
+                        self.diag.hint(arg);
                         return ParsingError.MissingValue;
                     }
                 },
@@ -171,7 +182,7 @@ pub fn Over(comptime T: type) type {
                 },
                 Level.forbidden => {
                     if (std.mem.indexOfScalarPos(u8, arg, 3, '=') != null) {
-                        self.hint(arg);
+                        self.diag.hint(arg);
                         return ParsingError.ForbiddenValue;
                     } else return &.{1};
                 },
@@ -188,11 +199,11 @@ pub fn Over(comptime T: type) type {
                             if (haystack[pos + 1] == '=') {
                                 return haystack[pos + 2 ..];
                             } else {
-                                self.hint(haystack);
+                                self.diag.hint(haystack);
                                 return ParsingError.ForbiddenFlagPosition;
                             }
                         } else {
-                            self.hint(haystack);
+                            self.diag.hint(haystack);
                             return ParsingError.MissingValue;
                         }
                     } else unreachable;
@@ -204,7 +215,7 @@ pub fn Over(comptime T: type) type {
                         } else if (haystack[pos + 1] == '=') {
                             return haystack[pos + 2 ..];
                         } else {
-                            self.hint(haystack);
+                            self.diag.hint(haystack);
                             return ParsingError.ForbiddenFlagPosition;
                         }
                     } else unreachable;
@@ -215,7 +226,7 @@ pub fn Over(comptime T: type) type {
                         if (c == needle) {
                             n += 1;
                         } else if (c == '=' and haystack[i - 1] == needle) {
-                            self.hint(haystack);
+                            self.diag.hint(haystack);
                             return ParsingError.ForbiddenValue;
                         }
                     }
