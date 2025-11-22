@@ -140,21 +140,15 @@ pub fn Over(comptime T: type) type {
             switch (self.req_lvl) {
                 Level.required => {
                     if (std.mem.indexOfScalarPos(u8, arg, 3, '=')) |i| {
-                        if (arg[i + 1 ..].len > 0) {
-                            return arg[i + 1 ..];
-                        }
+                        return arg[i + 1 ..];
+                    } else {
+                        self.hint(arg);
+                        return ParsingError.MissingValue;
                     }
-                    self.hint(arg);
-                    return ParsingError.MissingValue;
                 },
                 Level.allowed => {
                     return if (std.mem.indexOfScalarPos(u8, arg, 3, '=')) |i| {
-                        if (arg[i + 1 ..].len > 0) {
-                            return arg[i + 1 ..];
-                        } else {
-                            self.hint(arg);
-                            return ParsingError.MissingValue;
-                        }
+                        return arg[i + 1 ..];
                     } else return &.{1};
                 },
                 Level.forbidden => {
@@ -174,10 +168,6 @@ pub fn Over(comptime T: type) type {
                     if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
                         if (haystack.len >= pos + 2) {
                             if (haystack[pos + 1] == '=') {
-                                if (haystack.len == pos + 1) {
-                                    self.hint(haystack);
-                                    return ParsingError.MissingValue;
-                                }
                                 return haystack[pos + 2 ..];
                             } else {
                                 self.hint(haystack);
@@ -194,10 +184,6 @@ pub fn Over(comptime T: type) type {
                         if (haystack.len == pos + 1) {
                             return &.{1};
                         } else if (haystack[pos + 1] == '=') {
-                            if (haystack.len == pos + 2) {
-                                self.hint(haystack);
-                                return ParsingError.MissingValue;
-                            }
                             return haystack[pos + 2 ..];
                         } else {
                             self.hint(haystack);

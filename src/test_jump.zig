@@ -82,26 +82,38 @@ test "jump failure provides debug hints" {
 }
 
 test "jump flags with allowed value affectation" {
-    const iterator = StringIterator{ .stock = &.{ "-vc=auto", "-vvvc", "-bac=", "-cta" } };
+    const iterator = StringIterator{ .stock = &.{ "-vc=auto", "-vvvc", "-bac=", "--color=", "-cta" } };
     var jumper = jump.Over(StringIterator).init(iterator, 'c', &.{"color"}, .allowed, "activate colored output. Default is auto.");
 
     try expect(std.mem.eql(u8, (try jumper.next()).?, "auto"));
     try expect(1 == (try jumper.next()).?[0]);
 
-    // '=' must be followed by a value, it is too ambiguous to interpret otherwise.
-    try expectError(ParsingError.MissingValue, jumper.next());
-    try expect(std.mem.eql(u8, jumper.debug_hint, "-bac="));
+    // '=' with no value results in an emtpy string. Be it a short or long flag
+    try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
+    try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
 
-    // It also can't be not last of a flag chain
+    // It also cannot be last of a flag chain
     try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
     try expect(std.mem.eql(u8, jumper.debug_hint, "-cta"));
 }
 
 test "jump flags with required value affectation" {
-    const iterator = StringIterator{ .stock = &.{ "-d=alif", "-vd=ba", "-d", "-d=", "-dv" } };
+    const iterator = StringIterator{ .stock = &.{ "-d=alif", "-vd=va", "-d", "-d=", "--data=", "-dv" } };
     var jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
 
-    // restricted is close to allowed, it can't be in the middle of a flag chain or take an empty argument.
-    std.debug.print("arg: {s}", .{(try jumper.next()).?});
-    // try expect(std.mem.eql(u8, (try jumper.next()).?, "alif"));
+    // restricted is close to allowed, it can't be in the middle of a flag chain
+    // std.debug.print("arg: {s}", .{(try jumper.next()).?});
+    try expect(std.mem.eql(u8, (try jumper.next()).?, "alif"));
+    try expect(std.mem.eql(u8, (try jumper.next()).?, "va"));
+
+    try expectError(ParsingError.MissingValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-d"));
+
+    // '=' with no value results in an emtpy string. Be it a short or long flag
+    try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
+    try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
+
+    // It also cannot be last of a flag chain
+    try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
+    try expect(std.mem.eql(u8, jumper.debug_hint, "-dv"));
 }
