@@ -8,7 +8,7 @@ pub const ParsingError = error{
     MissingValue,
 };
 
-/// This provides the centralized 'smart' behavior and flexibility people expect.
+/// Provides the centralized 'smart' behavior and flexibility people expect.
 pub fn Registry(comptime T: type) type {
     const this: Registry(T) = struct {
         jumpers: []T,
@@ -25,6 +25,7 @@ pub fn Registry(comptime T: type) type {
     return this;
 }
 
+/// Jumps over the next positional argument.
 /// This is the Jump original way. No fat loop to decide if this is a positional or value.
 /// You can only use this if you promise to always put '=' after your option values, never ' '.
 /// Although it allows lazy and parallel parsing, this is not about performance.

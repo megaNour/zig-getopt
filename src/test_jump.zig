@@ -20,16 +20,20 @@ pub const StringIterator = struct {
 };
 
 test "jump flags with forbidden value affectation" {
-    // Simulate argv
+    // Simulate argv, we will parse -v, --verbose on it
     const iterator = StringIterator{ .stock = &.{ "--verbose", "alif", "--ba", "-ta", "-vv", "-av", "--", "-vvv" } };
     //                                             |    1                               2       1    --      3|
     //                                             |————————————————————————— 4 —————————————————————||—— 3 ——|
+
     // declare a jumper
     var jumper = jump.Over(StringIterator).init(iterator, 'v', &.{"verbose"}, .forbidden, "verbose logs");
+
     // define another starting from the same point
     var copyOfJumper = jumper;
+
     // get your verbose level
     try expect(4 == try copyOfJumper.count());
+
     // or read the elements one by one
     try expect(1 == (try jumper.next()).?[0]);
     try expect(2 == (try jumper.next()).?[0]);
