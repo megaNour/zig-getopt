@@ -102,7 +102,7 @@ test "jump flags with allowed value affectation" {
 }
 
 test "jump flags with required value affectation" {
-    const iterator = StringIterator{ .stock = &.{ "-d=alif", "-vd=va", "-d", "-d=", "--data=", "-dv" } };
+    const iterator = StringIterator{ .stock = &.{ "-d=alif", "-vd=va", "-d", "-d=", "--data=", "-dthis '=' is in a value" } };
     var jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
 
     // restricted is close to allowed, it can't be in the middle of a flag chain
@@ -117,9 +117,8 @@ test "jump flags with required value affectation" {
     try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
     try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
 
-    // It also cannot be last of a flag chain
-    try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
-    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-dv"));
+    // short form of a required value flag will automatically take everything on the right as its value
+    try expect(std.mem.eql(u8, (try jumper.next()).?, "this '=' is in a value"));
 }
 
 test "jump greedy" {
