@@ -86,7 +86,7 @@ test "jump failure provides debug hints" {
 }
 
 test "jump flags with allowed value affectation" {
-    const iterator = StringIterator{ .stock = &.{ "-vc=auto", "-vvvc", "-bac=", "--color=", "-cta" } };
+    const iterator = StringIterator{ .stock = &.{ "-vc=auto", "-vvvc", "-bac=", "--color=", "-cthis '=' is in a value" } };
     var jumper = jump.Over(StringIterator).init(iterator, 'c', &.{"color"}, .allowed, "activate colored output. Default is auto.");
 
     try expect(std.mem.eql(u8, (try jumper.next()).?, "auto"));
@@ -96,9 +96,8 @@ test "jump flags with allowed value affectation" {
     try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
     try expect(std.mem.eql(u8, (try jumper.next()).?, ""));
 
-    // It also cannot be last of a flag chain
-    try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
-    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-cta"));
+    // short form of a allowed value flag will automatically take everything on the right as its value
+    try expect(std.mem.eql(u8, (try jumper.next()).?, "this '=' is in a value"));
 }
 
 test "jump flags with required value affectation" {
@@ -136,4 +135,13 @@ test "jump greedy" {
 
     try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, ""));
     try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, "abc"));
+}
+
+test "edge cases" {
+    const iterator = StringIterator{ .stock = &.{ "-=abcdef", "--=abcdef", "=abcdef" } };
+    var jumper = jump.Over(StringIterator).init(iterator, 'a', &.{"alif"}, .required, "a random flag");
+    var pos = jump.OverPosLean(StringIterator).init(iterator);
+
+    try expect((try jumper.count()) == 0);
+    try expect(std.mem.eql(u8, pos.next().?, "=abcdef"));
 }

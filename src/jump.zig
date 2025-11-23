@@ -2,7 +2,6 @@ const std = @import("std");
 const ArgIterator = std.process.ArgIterator;
 
 pub const ParsingError = error{
-    ForbiddenEqualPosition,
     ForbiddenFlagPosition,
     ForbiddenValue,
     MissingValue,
@@ -127,7 +126,7 @@ pub fn Over(comptime T: type) type {
             return this;
         }
 
-        pub fn count(self: *@This()) !u8 {
+        pub fn count(self: *@This()) ParsingError!u8 {
             var aggregate: u8 = 0;
             while (try self.next()) |found| {
                 aggregate +|= found[0];
@@ -160,7 +159,7 @@ pub fn Over(comptime T: type) type {
                     continue; // positional
                 } else if (arg[0] == '-') { // option check needed
                     if (arg[1] == '-') { // longs or term
-                        if (arg.len == 2) {
+                        if (arg.len == 2 or arg[2] == '=') {
                             return null;
                         } else if (self.longs) |longs| {
                             for (longs) |l| {
@@ -169,14 +168,11 @@ pub fn Over(comptime T: type) type {
                                 }
                             }
                         } else continue;
+                    } else if (arg[1] == '=') {
+                        return null;
                     } else { // flag chain
-                        for (arg[1..], 1..) |c, i| {
-                            if (c == '=') {
-                                if (i > 0) return null else {
-                                    self.diag.hint(arg);
-                                    return ParsingError.ForbiddenEqualPosition;
-                                }
-                            } else if (c != self.short) {
+                        for (arg[1..]) |c| {
+                            if (c != self.short) {
                                 continue;
                             } else {
                                 return switch (self.req_lvl) {
@@ -220,18 +216,12 @@ pub fn Over(comptime T: type) type {
         }
 
         /// The input at this point needs to be a flag chain without leading '-'.
-        /// The needle needs to be guaranteed != '=' and seen before any '='
         fn parseFlagChain(self: *@This(), haystack: []const u8, needle: u8) ParsingError!?[]const u8 {
             switch (self.req_lvl) {
                 Level.required => {
-                    if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
+                    return if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
                         if (haystack.len >= pos + 2) {
-                            if (haystack.len > pos + 1) {
-                                return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
-                            } else {
-                                self.diag.hint(haystack);
-                                return ParsingError.ForbiddenFlagPosition;
-                            }
+                            return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
                         } else {
                             self.diag.hint(haystack);
                             return ParsingError.MissingValue;
@@ -242,11 +232,8 @@ pub fn Over(comptime T: type) type {
                     if (std.mem.indexOfScalar(u8, haystack, needle)) |pos| {
                         if (haystack.len == pos + 1) {
                             return &.{1};
-                        } else if (haystack[pos + 1] == '=') {
-                            return haystack[pos + 2 ..];
                         } else {
-                            self.diag.hint(haystack);
-                            return ParsingError.ForbiddenFlagPosition;
+                            return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
                         }
                     } else unreachable;
                 },
