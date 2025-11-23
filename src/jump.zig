@@ -135,7 +135,7 @@ pub fn Over(comptime T: type) type {
         }
 
         /// Gets the next occurence of the target flag in a greedy fashion or null if none.
-        /// Greedy here means if no '=value' part is found, this will look in the next argument for a value.
+        /// Greedy here means if no '=value' part is found, this will l.use in the next argument for a value.
         /// It will be done in a non-altering fashion for the iterator by working on a copy.
         /// DO NOT USE in combination with OverPosLean.next() - use Register.nextPos() instead
         pub fn nextGreedy(self: *@This()) ParsingError!?[]const u8 {
@@ -155,39 +155,52 @@ pub fn Over(comptime T: type) type {
 
         pub fn next(self: *@This()) ParsingError!?[]const u8 {
             while (self.iter.next()) |arg| {
-                if (arg.len < 2) {
-                    continue; // positional
-                } else if (arg[0] == '-') { // option check needed
-                    if (arg[1] == '-') { // longs or term
-                        if (arg.len == 2 or arg[2] == '=') {
-                            return null;
-                        } else if (self.longs) |longs| {
-                            for (longs) |l| {
-                                if (arg.len >= l.len + 2 and std.mem.eql(u8, arg[2 .. l.len + 2], l)) {
-                                    return self.parseArg(arg);
-                                }
+                switch (self.match(arg)) {
+                    .skip => continue,
+                    .use => |res| return res,
+                }
+            } else return null;
+        }
+
+        // Distinguishes values that should lead to a 'continue'.
+        // 'null' already hints at end of stream or '--' terminator.
+        // 'skip' is literally "this value is not for you, keep going".
+        const Action = union(enum) { skip: void, use: ParsingError!?[]const u8 };
+
+        pub fn match(self: *@This(), arg: []const u8) Action {
+            if (arg.len < 2) {
+                return .{ .skip = {} };
+            } else if (arg[0] == '-') { // option check needed
+                if (arg[1] == '-') { // longs or term
+                    if (arg.len == 2 or arg[2] == '=') {
+                        return .{ .use = null };
+                    } else if (self.longs) |longs| {
+                        for (longs) |l| {
+                            if (arg.len >= l.len + 2 and std.mem.eql(u8, arg[2 .. l.len + 2], l)) {
+                                return .{ .use = self.parseArg(arg) };
                             }
-                        } else continue;
-                    } else if (arg[1] == '=') {
-                        return null;
-                    } else { // flag chain
-                        for (arg[1..]) |c| {
-                            if (c != self.short) {
-                                continue;
-                            } else {
-                                return switch (self.req_lvl) {
-                                    Level.required => {
-                                        return self.parseFlagChain(arg, c);
-                                    },
-                                    Level.allowed, Level.forbidden => {
-                                        return self.parseFlagChain(arg, c);
-                                    },
-                                };
-                            }
+                        } else return .{ .skip = {} };
+                    }
+                } else if (arg[1] == '=') {
+                    return .{ .use = null };
+                } else { // flag chain
+                    for (arg[1..]) |c| {
+                        if (c != self.short) {
+                            continue;
+                        } else {
+                            return switch (self.req_lvl) {
+                                Level.required => {
+                                    return .{ .use = self.parseFlagChain(arg, c) };
+                                },
+                                Level.allowed, Level.forbidden => {
+                                    return .{ .use = self.parseFlagChain(arg, c) };
+                                },
+                            };
                         }
                     }
                 }
-            } else return null;
+            }
+            return .{ .skip = {} };
         }
 
         /// At this point we need the input to be starting with '--' then a valid target flag.
