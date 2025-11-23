@@ -125,6 +125,25 @@ pub fn Over(comptime T: type) type {
             return aggregate;
         }
 
+        /// Gets the next occurence of the target flag in a greedy fashion or null if none.
+        /// Greedy here means if no '=value' part is found, this will look in the next argument for a value.
+        /// It will be done in a non-altering fashion for the iterator by working on a copy.
+        /// DO NOT USE in combination with OverPosLean.next() - use Register.nextPos() instead
+        pub fn nextGreedy(self: *@This()) ParsingError!?[]const u8 {
+            return self.next() catch |err| switch (err) {
+                ParsingError.MissingValue => {
+                    if (self.req_lvl == .required) {
+                        var peeker = self.iter; // make a copy of the iterator to next on it wihout losing our position
+                        const peekie = peeker.next() orelse return err; // return the original error if we can't peek
+                        if (peekie.len == 0 or peekie[0] != '-') // A valid value is here for the taking
+                            return self.iter.next().?; // and so we do take it
+                    }
+                    return err;
+                },
+                else => err,
+            };
+        }
+
         pub fn next(self: *@This()) ParsingError!?[]const u8 {
             while (self.iter.next()) |arg| {
                 if (arg.len < 2) {

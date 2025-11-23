@@ -121,3 +121,20 @@ test "jump flags with required value affectation" {
     try expectError(ParsingError.ForbiddenFlagPosition, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-dv"));
 }
+
+test "jump greedy" {
+    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data=", "ba", "--data", "-d", "-d=", "--data", "abc" } };
+    var jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
+
+    try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, "alif"));
+    try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, ""));
+
+    try expectError(ParsingError.MissingValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "--data"));
+
+    try expectError(ParsingError.MissingValue, jumper.next());
+    try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-d"));
+
+    try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, ""));
+    try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, "abc"));
+}
