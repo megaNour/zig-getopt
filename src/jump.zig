@@ -15,7 +15,17 @@ pub fn Registry(comptime T: type) type {
         diag: Diag = Diag{ .debug_buf = undefined, .debug_hint = undefined },
 
         /// If an arg starts with '-', this loops over all jumpers until it matches one or invalidates the arg.
-        pub fn validate() ParsingError!void {}
+        pub fn validate() ParsingError!void {
+            // read one arg
+            //      if starts with !- or is len 1 -> positional
+            //      if starts with -!- -> short
+            //      if starts with -- -> long
+            //      if match and jumper is not required value, continue to next arg
+            //      if match and jumper is required value
+            //          -> check if the value is in the arg already = or next chars
+            //          -> if yes, continue to next arg
+            //          -> if no, check next arg does not start with -
+        }
         /// Since it knows all jumpers, it can also aggregate help.
         pub fn help() ParsingError!?[]const u8 {}
         /// This is the reliable way to get positional arguments if you write your flag values without '='
