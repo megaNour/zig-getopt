@@ -144,4 +144,59 @@ test "edge cases" {
 
     try expect((try jumper.count()) == 0);
     try expect(std.mem.eql(u8, pos.next().?, "=abcdef"));
+
+    const jumpers = [_]jump.Over(StringIterator){jumper};
+    var register = jump.Register(StringIterator).init(iterator);
+    try expectError(ParsingError.MalformedFlag, register.validate(&jumpers));
+}
+
+// The Register is a different beast.
+// It has a global knowledge of flags, allowing to make '=' optional in some case
+// and it detect flag typos (not value pertinence).
+// Register tests act on the whole list of arguments, they require some init... redoing it by test was the most straight-forward way...
+test "register validation OK" {
+    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data", "-" } };
+    const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
+    const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
+    const jumpers = [_]jump.Over(StringIterator){ jumper, other };
+    var register = jump.Register(StringIterator).init(iterator);
+    try register.validate(&jumpers);
+}
+
+test "register validation UnknownFlag error" {
+    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--dota", "-" } };
+    const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
+    const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
+    const jumpers = [_]jump.Over(StringIterator){ jumper, other };
+    var register = jump.Register(StringIterator).init(iterator);
+    try expectError(ParsingError.UnknownFlag, register.validate(&jumpers));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "--dota"));
+}
+
+test "register validation MalformedFlag error" {
+    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--=", "-" } };
+    const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
+    const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
+    const jumpers = [_]jump.Over(StringIterator){ jumper, other };
+    var register = jump.Register(StringIterator).init(iterator);
+    try expectError(ParsingError.MalformedFlag, register.validate(&jumpers));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "--="));
+}
+
+test "register validation only affects current subcommand" {
+    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data", "ba", "--", "-d", "-alif" } };
+    const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
+    const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
+    const jumpers = [_]jump.Over(StringIterator){ jumper, other };
+    var register = jump.Register(StringIterator).init(iterator);
+    try register.validate(&jumpers);
+}
+
+test "next pos with optional =" {
+    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "positional", "--data", "ba", "--", "-d", "-alif" } };
+    const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
+    const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
+    const jumpers = [_]jump.Over(StringIterator){ jumper, other };
+    var register = jump.Register(StringIterator).init(iterator);
+    try expect(std.mem.eql(u8, (try register.nextPos(&jumpers)).?, "positional"));
 }
