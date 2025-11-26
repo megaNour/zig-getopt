@@ -3,8 +3,11 @@ const ArgIterator = std.process.ArgIterator;
 
 pub const ParsingError = error{
     ForbiddenValue,
-    MalformedFlag,
     MissingValue,
+};
+
+pub const ValidationError = error{
+    MalformedFlag,
     UnknownFlag,
 };
 
@@ -21,7 +24,7 @@ pub fn Register(comptime T: type) type {
         }
 
         /// If an arg starts with '-', this loops over all jumpers until it matches one or invalidates the arg.
-        pub fn validate(self: *@This(), jumpers: []const Over(T)) ParsingError!void {
+        pub fn validate(self: *@This(), jumpers: []const Over(T)) (ValidationError || ParsingError)!void {
             var throw_away = self.iter;
             validation: while (throw_away.next()) |arg| {
                 if (arg.len > 1 and arg[0] == '-') {
