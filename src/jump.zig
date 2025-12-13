@@ -90,17 +90,21 @@ pub fn Register(comptime T: type) type {
     };
 }
 
+fn assertIterator(comptime T: type) void {
+    if (@TypeOf(T.next) == fn (*T) ?[:0]const u8 or @TypeOf(T.next) == fn (*T) ?[]const u8) {
+        // fine
+    } else {
+        @compileError("T.next must match: fn(self: *T) ?[]const u8 or fn(self: *T) ?[:0]const u8");
+    }
+}
+
 /// Jumps over the next positional argument.
 /// This is the Jump original way. No fat loop to decide if this is a positional or value.
 /// You can only use this if you promise to always put '=' after your option values, never ' '.
 /// Although it allows lazy and parallel parsing, this is not about performance.
 /// It's about giving the user total control over: how and when he aggregates, casts or handles errors without allocation.
 pub fn OverPosLean(comptime T: type) type {
-    comptime if (@TypeOf(T.next) == fn (*T) ?[:0]const u8 or @TypeOf(T.next) == fn (*T) ?[]const u8) {
-        // fine
-    } else {
-        @compileError("T.next must match: fn(self: *T) ?[]const u8 or fn(self: *T) ?[:0]const u8");
-    };
+    assertIterator(T);
     return struct {
         iter: T,
 
@@ -151,11 +155,7 @@ pub const Diag: type = struct {
 };
 
 pub fn Over(comptime T: type) type {
-    comptime if (@TypeOf(T.next) == fn (*T) ?[:0]const u8 or @TypeOf(T.next) == fn (*T) ?[]const u8) {
-        // fine
-    } else {
-        @compileError("T.next must match: fn(self: *T) ?[]const u8 or fn(self: *T) ?[:0]const u8");
-    };
+    assertIterator(T);
     return struct {
         iter: T,
         short: ?u8,
