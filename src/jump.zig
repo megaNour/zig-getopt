@@ -199,7 +199,7 @@ pub fn Over(comptime T: type) type {
             };
         }
 
-        pub fn peekAtNextArgForValue(self: *@This(), iterator: *T, err: LocalParsingError) LocalParsingError!?[]const u8 {
+        fn peekAtNextArgForValue(self: *@This(), iterator: *T, err: LocalParsingError) LocalParsingError!?[]const u8 {
             if (self.req_lvl == .required) {
                 var peeker = self.iter; // make a copy of the iterator to next on it wihout losing our position
                 const peekie = peeker.next() orelse return err; // return the original error if we can't peek
