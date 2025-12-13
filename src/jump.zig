@@ -109,9 +109,7 @@ pub fn OverPosLean(comptime T: type) type {
         iter: T,
 
         pub fn init(iter: T) @This() {
-            return @This(){
-                .iter = iter,
-            };
+            return @This(){ .iter = iter };
         }
 
         pub fn next(self: *@This()) ?[]const u8 {
