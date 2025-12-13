@@ -20,6 +20,7 @@ pub const StringIterator = struct {
 
 test "jump flags with forbidden value affectation" {
     // Simulate argv, we will parse -v, --verbose on it
+    // This iterator is const because we only use it as a base point to make variable copies that start from that point.
     const iterator = StringIterator{ .stock = &.{ "--verbose", "alif", "--ba", "-ta", "-vv", "-av", "--", "-vvv" } };
     //                                             |    1                               2       1    --      3|
     //                                             |————————————————————————— 4 —————————————————————||—— 3 ——|
@@ -147,6 +148,15 @@ test "edge cases" {
     const jumpers = [_]jump.Over(StringIterator){jumper};
     var register = jump.Register(StringIterator).init(iterator);
     try expectError(jump.GlobalParsingError.MalformedFlag, register.validate(&jumpers));
+}
+
+test "jump over command" {
+    // if you have subcommands you can make your reference iterator a var, so you can set it at the start of a subcommand
+    // and then give it as a base for all your jumpers
+    var iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data=", "ba", "--", "hello" } };
+    jump.OverCommand(StringIterator, &iterator);
+    var next_command = jump.OverPosLean(StringIterator).init(iterator);
+    try expect(std.mem.eql(u8, next_command.next().?, "hello"));
 }
 
 // The Register is a different beast.

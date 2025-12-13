@@ -98,6 +98,14 @@ fn assertIterator(comptime T: type) void {
     }
 }
 
+/// Advance to the next subcommand if any
+pub fn OverCommand(comptime T: type, iter: *T) void {
+    assertIterator(T);
+    while (iter.next()) |arg| {
+        if (std.mem.eql(u8, arg, "--")) break;
+    }
+}
+
 /// Jumps over the next positional argument.
 /// This is the Jump original way. No fat loop to decide if this is a positional or value.
 /// You can only use this if you promise to always put '=' after your option values, never ' '.
