@@ -49,15 +49,18 @@ pub fn Register(comptime T: type) type {
         }
 
         fn secondChance(self: *@This(), iterator: *T, err: LocalParsingError, arg: []const u8) bool {
-            if (err == LocalParsingError.MissingValue) {
-                if (iterator.next()) |next| {
-                    if (next.len > 1 and next[0] == '-') {
-                        self.diag.hint(arg);
-                        return false;
+            switch (err) {
+                LocalParsingError.MissingValue => {
+                    if (iterator.next()) |next| {
+                        if (next.len > 1 and next[0] == '-') {
+                            self.diag.hint(arg);
+                            return false;
+                        }
                     }
-                }
+                    return true;
+                },
+                LocalParsingError.ForbiddenValue => unreachable,
             }
-            return true;
         }
 
         /// This is the reliable way to get positional arguments if you write any required flag value detached from the flag: '-k v' instead of '-k=v'
@@ -194,19 +197,20 @@ pub fn Over(comptime T: type) type {
         /// DO NOT USE in combination with OverPosLean.next() - use Register.nextPos() instead
         pub fn nextGreedy(self: *@This()) LocalParsingError!?[]const u8 {
             return self.next() catch |err| switch (err) {
-                LocalParsingError.MissingValue => self.peekAtNextArgForValue(&self.iter, err),
+                LocalParsingError.MissingValue => if (self.peekAtNextArgForValue()) |res| res else err,
                 else => err,
             };
         }
 
-        fn peekAtNextArgForValue(self: *@This(), iterator: *T, err: LocalParsingError) LocalParsingError!?[]const u8 {
+        fn peekAtNextArgForValue(self: *@This()) ?[]const u8 {
             if (self.req_lvl == .required) {
                 var peeker = self.iter; // make a copy of the iterator to next on it wihout losing our position
-                const peekie = peeker.next() orelse return err; // return the original error if we can't peek
-                if (peekie.len == 0 or peekie[0] != '-') // A valid value is here for the taking
-                    return iterator.next().?; // and so we do take it
+                if (peeker.next()) |peekie| {
+                    if (peekie.len == 0 or peekie[0] != '-') // A valid value is here for the taking
+                        return self.iter.next().?; // and so we do take it
+                }
             }
-            return err;
+            return null;
         }
 
         pub fn next(self: *@This()) LocalParsingError!?[]const u8 {
