@@ -3,7 +3,6 @@ const ArgIterator = std.process.ArgIterator;
 const jump = @import("jump.zig");
 const expect = std.testing.expect;
 const expectError = std.testing.expectError;
-const ParsingError = jump.ParsingError;
 
 pub const StringIterator = struct {
     stock: []const []const u8,
@@ -54,16 +53,16 @@ test "jump flags with wrong value affectation" {
     const iterator = StringIterator{ .stock = &.{ "--verbose=a", "alif", "--ba", "-ta", "-vv=", "-av", "-v=vv" } };
     var jumper = jump.Over(StringIterator).init(iterator, 'v', &.{"verbose"}, .forbidden, "verbose logs");
 
-    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expectError(jump.LocalParsingError.ForbiddenValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "--verbose=a"));
 
     // You can still continue parsing
-    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expectError(jump.LocalParsingError.ForbiddenValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-vv="));
 
     try expect(1 == (try jumper.next()).?[0]); // '-av'
 
-    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expectError(jump.LocalParsingError.ForbiddenValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-v=vv"));
 }
 
@@ -77,11 +76,11 @@ test "jump failure provides debug hints" {
     try expect(jumper.diag.debug_hint.len == 0);
 
     // failure case
-    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expectError(jump.LocalParsingError.ForbiddenValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-v=123"));
 
     // hints are truncated to not go over 32 chars
-    try expectError(ParsingError.ForbiddenValue, jumper.next());
+    try expectError(jump.LocalParsingError.ForbiddenValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-abcdefghijklmnopqrstuv=very_..."));
 }
 
@@ -109,7 +108,7 @@ test "jump flags with required value affectation" {
     try expect(std.mem.eql(u8, (try jumper.next()).?, "alif"));
     try expect(std.mem.eql(u8, (try jumper.next()).?, "va"));
 
-    try expectError(ParsingError.MissingValue, jumper.next());
+    try expectError(jump.LocalParsingError.MissingValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-d"));
 
     // '=' with no value results in an emtpy string. Be it a short or long flag
@@ -127,10 +126,10 @@ test "jump greedy" {
     try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, "alif"));
     try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, ""));
 
-    try expectError(ParsingError.MissingValue, jumper.next());
+    try expectError(jump.LocalParsingError.MissingValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "--data"));
 
-    try expectError(ParsingError.MissingValue, jumper.next());
+    try expectError(jump.LocalParsingError.MissingValue, jumper.next());
     try expect(std.mem.eql(u8, jumper.diag.debug_hint, "-d"));
 
     try expect(std.mem.eql(u8, (try jumper.nextGreedy()).?, ""));
@@ -147,7 +146,7 @@ test "edge cases" {
 
     const jumpers = [_]jump.Over(StringIterator){jumper};
     var register = jump.Register(StringIterator).init(iterator);
-    try expectError(ParsingError.MalformedFlag, register.validate(&jumpers));
+    try expectError(jump.GlobalParsingError.MalformedFlag, register.validate(&jumpers));
 }
 
 // The Register is a different beast.
@@ -169,7 +168,7 @@ test "register validation UnknownFlag error" {
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
     var register = jump.Register(StringIterator).init(iterator);
-    try expectError(ParsingError.UnknownFlag, register.validate(&jumpers));
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.validate(&jumpers));
     try expect(std.mem.eql(u8, register.diag.debug_hint, "--dota"));
 }
 
@@ -179,7 +178,7 @@ test "register validation MalformedFlag error" {
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
     var register = jump.Register(StringIterator).init(iterator);
-    try expectError(ParsingError.MalformedFlag, register.validate(&jumpers));
+    try expectError(jump.GlobalParsingError.MalformedFlag, register.validate(&jumpers));
     try expect(std.mem.eql(u8, register.diag.debug_hint, "--="));
 }
 

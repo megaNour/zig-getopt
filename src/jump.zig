@@ -1,15 +1,15 @@
 const std = @import("std");
 const ArgIterator = std.process.ArgIterator;
 
-pub const ParsingError = error{
+pub const LocalParsingError = error{
     ForbiddenValue,
     MissingValue,
 };
 
-pub const ValidationError = error{
+pub const GlobalParsingError = error{
     MalformedFlag,
     UnknownFlag,
-};
+} || LocalParsingError;
 
 /// Provides the centralized 'smart' behavior and flexibility people expect.
 pub fn Register(comptime T: type) type {
@@ -24,7 +24,7 @@ pub fn Register(comptime T: type) type {
         }
 
         /// If an arg starts with '-', this loops over all jumpers until it matches one or invalidates the arg.
-        pub fn validate(self: *@This(), jumpers: []const Over(T)) (ValidationError || ParsingError)!void {
+        pub fn validate(self: *@This(), jumpers: []const Over(T)) GlobalParsingError!void {
             var throw_away = self.iter;
             validation: while (throw_away.next()) |arg| {
                 if (arg.len > 1 and arg[0] == '-') {
@@ -33,7 +33,7 @@ pub fn Register(comptime T: type) type {
                             switch (jumper.match(arg)) {
                                 .skip => return if (std.mem.startsWith(u8, arg, "-=") or std.mem.startsWith(u8, arg, "--=")) {
                                     self.diag.hint(arg);
-                                    return ParsingError.MalformedFlag;
+                                    return GlobalParsingError.MalformedFlag;
                                 } else continue,
                                 .short => _ = jumper.parseFlagChain(arg) catch |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
                                 .long => _ = jumper.parseArg(arg) catch |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
@@ -42,14 +42,14 @@ pub fn Register(comptime T: type) type {
                         }
                     } else {
                         self.diag.hint(arg);
-                        return ParsingError.UnknownFlag;
+                        return GlobalParsingError.UnknownFlag;
                     }
                 }
             }
         }
 
-        fn secondChance(self: *@This(), iterator: *T, err: ParsingError, arg: []const u8) bool {
-            if (err == ParsingError.MissingValue) {
+        fn secondChance(self: *@This(), iterator: *T, err: LocalParsingError, arg: []const u8) bool {
+            if (err == LocalParsingError.MissingValue) {
                 if (iterator.next()) |next| {
                     if (next.len > 1 and next[0] == '-') {
                         self.diag.hint(arg);
@@ -61,7 +61,7 @@ pub fn Register(comptime T: type) type {
         }
 
         /// This is the reliable way to get positional arguments if you write any required flag value detached from the flag: '-k v' instead of '-k=v'
-        pub fn nextPos(self: *@This(), jumpers: []const Over(T)) ParsingError!?[]const u8 {
+        pub fn nextPos(self: *@This(), jumpers: []const Over(T)) (error{MalformedFlag} || LocalParsingError)!?[]const u8 {
             find: while (self.iter.next()) |arg| {
                 if (arg.len == 0 or arg[0] != '-') return arg else {
                     for (jumpers) |jumper| {
@@ -69,7 +69,7 @@ pub fn Register(comptime T: type) type {
                             switch (jumper.match(arg)) {
                                 .skip => return if (!std.mem.startsWith(u8, arg, "-=") and !std.mem.startsWith(u8, arg, "--=")) arg else {
                                     self.diag.hint(arg);
-                                    return ParsingError.MalformedFlag;
+                                    return GlobalParsingError.MalformedFlag;
                                 },
                                 .short => _ = jumper.parseFlagChain(arg) catch |err| if (self.secondChance(&self.iter, err, arg)) continue :find else return err,
                                 .long => _ = jumper.parseArg(arg) catch |err| if (self.secondChance(&self.iter, err, arg)) continue :find else return err,
@@ -83,7 +83,7 @@ pub fn Register(comptime T: type) type {
         }
 
         /// Since it knows all jumpers, it can also aggregate help.
-        pub fn help() ParsingError!?[]const u8 {}
+        pub fn help() ?[]const u8 {}
     };
 }
 
@@ -179,7 +179,7 @@ pub fn Over(comptime T: type) type {
             return this;
         }
 
-        pub fn count(self: *@This()) ParsingError!u8 {
+        pub fn count(self: *@This()) LocalParsingError!u8 {
             var aggregate: u8 = 0;
             while (try self.next()) |found| {
                 aggregate +|= found[0];
@@ -192,14 +192,14 @@ pub fn Over(comptime T: type) type {
         /// Checking will be done in a non-altering fashion for the iterator by working on a copy.
         /// Then consumption on success will really happen so the original iterator is up-todate.
         /// DO NOT USE in combination with OverPosLean.next() - use Register.nextPos() instead
-        pub fn nextGreedy(self: *@This()) ParsingError!?[]const u8 {
+        pub fn nextGreedy(self: *@This()) LocalParsingError!?[]const u8 {
             return self.next() catch |err| switch (err) {
-                ParsingError.MissingValue => self.peekAtNextArgForValue(&self.iter, err),
+                LocalParsingError.MissingValue => self.peekAtNextArgForValue(&self.iter, err),
                 else => err,
             };
         }
 
-        pub fn peekAtNextArgForValue(self: *@This(), iterator: *T, err: ParsingError) ParsingError!?[]const u8 {
+        pub fn peekAtNextArgForValue(self: *@This(), iterator: *T, err: LocalParsingError) LocalParsingError!?[]const u8 {
             if (self.req_lvl == .required) {
                 var peeker = self.iter; // make a copy of the iterator to next on it wihout losing our position
                 const peekie = peeker.next() orelse return err; // return the original error if we can't peek
@@ -209,7 +209,7 @@ pub fn Over(comptime T: type) type {
             return err;
         }
 
-        pub fn next(self: *@This()) ParsingError!?[]const u8 {
+        pub fn next(self: *@This()) LocalParsingError!?[]const u8 {
             while (self.iter.next()) |arg| {
                 switch (self.match(arg)) {
                     .skip => continue,
@@ -261,13 +261,13 @@ pub fn Over(comptime T: type) type {
         }
 
         /// At this point we need the input to be starting with '--' then a valid target flag.
-        fn parseArg(self: *const @This(), arg: []const u8) ParsingError!?[]const u8 {
+        fn parseArg(self: *const @This(), arg: []const u8) LocalParsingError!?[]const u8 {
             switch (self.req_lvl) {
                 Level.required => {
                     if (std.mem.indexOfScalarPos(u8, arg, 3, '=')) |i| {
                         return arg[i + 1 ..];
                     } else {
-                        return ParsingError.MissingValue;
+                        return LocalParsingError.MissingValue;
                     }
                 },
                 Level.allowed => {
@@ -277,7 +277,7 @@ pub fn Over(comptime T: type) type {
                 },
                 Level.forbidden => {
                     if (std.mem.indexOfScalarPos(u8, arg, 3, '=') != null) {
-                        return ParsingError.ForbiddenValue;
+                        return LocalParsingError.ForbiddenValue;
                     } else return &.{1};
                 },
             }
@@ -285,14 +285,14 @@ pub fn Over(comptime T: type) type {
 
         /// The input at this point needs to be a flag chain without leading '-'.
         /// Reaching here means we know the .short field is not null.
-        fn parseFlagChain(self: *const @This(), haystack: []const u8) ParsingError!?[]const u8 {
+        fn parseFlagChain(self: *const @This(), haystack: []const u8) LocalParsingError!?[]const u8 {
             switch (self.req_lvl) {
                 Level.required => {
                     return if (std.mem.indexOfScalar(u8, haystack, self.short.?)) |pos| {
                         if (haystack.len >= pos + 2) {
                             return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
                         } else {
-                            return ParsingError.MissingValue;
+                            return LocalParsingError.MissingValue;
                         }
                     } else unreachable;
                 },
@@ -311,7 +311,7 @@ pub fn Over(comptime T: type) type {
                         if (c == self.short.?) {
                             n += 1;
                         } else if (c == '=' and haystack[i - 1] == self.short.?) {
-                            return ParsingError.ForbiddenValue;
+                            return LocalParsingError.ForbiddenValue;
                         }
                     }
                     return &.{n};
