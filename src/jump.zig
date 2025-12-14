@@ -34,8 +34,8 @@ pub fn Register(comptime T: type) type {
                                 self.diag.hint(arg);
                                 return GlobalParsingError.MalformedFlag;
                             } else continue,
-                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &throw_away, err, arg)) break else return err,
-                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &throw_away, err, arg)) break else return err,
+                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &throw_away, err, arg)) break else return err,
+                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &throw_away, err, arg)) break else return err,
                             .terminator => break :validation,
                         }
                     } else {
@@ -46,7 +46,7 @@ pub fn Register(comptime T: type) type {
             }
         }
 
-        fn secondChance(self: *@This(), req_lvl: Level, iterator: *T, err: LocalParsingError, arg: []const u8) bool {
+        fn peekAtNextArgForValue(self: *@This(), req_lvl: Level, iterator: *T, err: LocalParsingError, arg: []const u8) bool {
             if (req_lvl != .required) {
                 return false; // not interested in looking, only required level may have a detached value
             } else switch (err) {
@@ -75,8 +75,8 @@ pub fn Register(comptime T: type) type {
                                 self.diag.hint(arg);
                                 return GlobalParsingError.MalformedFlag;
                             },
-                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
-                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
+                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
+                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
                             .terminator => return null,
                         }
                     } else {
