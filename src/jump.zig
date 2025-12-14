@@ -66,7 +66,6 @@ pub fn Register(comptime T: type) type {
             find: while (self.iter.next()) |arg| {
                 if (arg.len == 0 or arg[0] != '-') return arg else {
                     for (jumpers) |jumper| {
-                        std.debug.print("jumper {s}, arg {s}\n", .{ jumper.longs.?[0], arg });
                         if (jumper.req_lvl == .required) {
                             switch (jumper.match(arg)) {
                                 .skip => return if (!std.mem.startsWith(u8, arg, "-=") and !std.mem.startsWith(u8, arg, "--=")) arg else {
