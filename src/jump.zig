@@ -29,16 +29,14 @@ pub fn Register(comptime T: type) type {
             validation: while (throw_away.next()) |arg| {
                 if (arg.len > 1 and arg[0] == '-') {
                     for (jumpers) |jumper| {
-                        if (jumper.req_lvl == .required) {
-                            switch (jumper.match(arg)) {
-                                .skip => return if (std.mem.startsWith(u8, arg, "-=") or std.mem.startsWith(u8, arg, "--=")) {
-                                    self.diag.hint(arg);
-                                    return GlobalParsingError.MalformedFlag;
-                                } else continue,
-                                .short => _ = jumper.parseFlagChain(arg) catch |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
-                                .long => _ = jumper.parseArg(arg) catch |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
-                                .terminator => break :validation,
-                            }
+                        switch (jumper.match(arg)) {
+                            .skip => return if (std.mem.startsWith(u8, arg, "-=") or std.mem.startsWith(u8, arg, "--=")) {
+                                self.diag.hint(arg);
+                                return GlobalParsingError.MalformedFlag;
+                            } else continue,
+                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
+                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
+                            .terminator => break :validation,
                         }
                     } else {
                         self.diag.hint(arg);
