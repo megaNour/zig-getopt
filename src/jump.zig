@@ -34,8 +34,8 @@ pub fn Register(comptime T: type) type {
                                 self.diag.hint(arg);
                                 return GlobalParsingError.MalformedFlag;
                             } else continue,
-                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
-                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.secondChance(&throw_away, err, arg)) break else return err,
+                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &throw_away, err, arg)) break else return err,
+                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &throw_away, err, arg)) break else return err,
                             .terminator => break :validation,
                         }
                     } else {
@@ -46,8 +46,10 @@ pub fn Register(comptime T: type) type {
             }
         }
 
-        fn secondChance(self: *@This(), iterator: *T, err: LocalParsingError, arg: []const u8) bool {
-            switch (err) {
+        fn secondChance(self: *@This(), req_lvl: Level, iterator: *T, err: LocalParsingError, arg: []const u8) bool {
+            if (req_lvl != .required) {
+                return false; // not interested in looking, only required level may have a detached value
+            } else switch (err) {
                 LocalParsingError.MissingValue => {
                     if (iterator.next()) |next| {
                         if (next.len > 1 and next[0] == '-') {
@@ -66,16 +68,16 @@ pub fn Register(comptime T: type) type {
             find: while (self.iter.next()) |arg| {
                 if (arg.len == 0 or arg[0] != '-') return arg else {
                     for (jumpers) |jumper| {
-                        if (jumper.req_lvl == .required) {
-                            switch (jumper.match(arg)) {
-                                .skip => return if (!std.mem.startsWith(u8, arg, "-=") and !std.mem.startsWith(u8, arg, "--=")) arg else {
-                                    self.diag.hint(arg);
-                                    return GlobalParsingError.MalformedFlag;
-                                },
-                                .short => _ = jumper.parseFlagChain(arg) catch |err| if (self.secondChance(&self.iter, err, arg)) continue :find else return err,
-                                .long => _ = jumper.parseArg(arg) catch |err| if (self.secondChance(&self.iter, err, arg)) continue :find else return err,
-                                .terminator => return null,
-                            }
+                        switch (jumper.match(arg)) {
+                            .skip => if (!std.mem.startsWith(u8, arg, "-=") and !std.mem.startsWith(u8, arg, "--=")) {
+                                _ = self.iter.next();
+                            } else {
+                                self.diag.hint(arg);
+                                return GlobalParsingError.MalformedFlag;
+                            },
+                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
+                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.secondChance(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
+                            .terminator => return null,
                         }
                     } else {
                         self.diag.hint(arg);
@@ -101,7 +103,7 @@ fn assertIterator(comptime T: type) void {
 /// Advance to the next subcommand if any
 pub fn OverCommand(comptime T: type, iter: *T) void {
     assertIterator(T);
-    while (iter.next()) |arg| {
+    while (iter.*.next()) |arg| {
         if (std.mem.eql(u8, arg, "--")) break;
     }
 }

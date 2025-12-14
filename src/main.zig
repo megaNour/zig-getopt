@@ -65,8 +65,9 @@ pub fn main() void {
     // So we can start jumping on positionals even after validating all args.
     // This is the second capability brouhgt by the Register.
     // Since it knows which flag consume value, it can discriminate "--option value" from "--opotion positional"
+
     while (register.nextPos(&[_]jump.Over(ArgIterator){myOpt})) |opt| {
-        if (opt) |val| std.debug.print("positional from Register: {s}\n", .{val});
+        if (opt) |val| std.debug.print("positional from Register: {s}\n", .{val}) else break;
     } else |err| {
         switch (err) {
             error.ForbiddenValue => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),

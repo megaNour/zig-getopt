@@ -193,19 +193,27 @@ test "register validation MalformedFlag error" {
 }
 
 test "register validation only affects current subcommand" {
-    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data", "ba", "--", "-d", "-alif" } };
+    var iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data", "ba", "--", "-e", "ok", "-x", "not ok" } };
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
     var register = jump.Register(StringIterator).init(iterator);
+    // validate the first subcommand only
     try register.validate(&jumpers);
+    // move to the next and validate
+    jump.OverCommand(StringIterator, &iterator);
+    register = jump.Register(StringIterator).init(iterator);
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.validate(&jumpers));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "-x"));
 }
 
-test "next pos with optional =" {
-    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "positional", "--data", "ba", "--", "-d", "-alif" } };
+test "next pos with optional '='" {
+    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "positional", "-x", "ba" } };
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
     var register = jump.Register(StringIterator).init(iterator);
     try expect(std.mem.eql(u8, (try register.nextPos(&jumpers)).?, "positional"));
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.nextPos(&jumpers));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "-x"));
 }
