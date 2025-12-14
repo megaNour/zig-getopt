@@ -64,10 +64,11 @@ pub fn Register(comptime T: type) type {
         }
 
         /// This is the reliable way to get positional arguments if you write any required flag value detached from the flag: "--option value" instead of "--option=value"
-        pub fn nextPos(self: *@This(), jumpers: []const Over(T)) (error{MalformedFlag} || LocalParsingError)!?[]const u8 {
+        pub fn nextPos(self: *@This(), jumpers: []const Over(T)) GlobalParsingError!?[]const u8 {
             find: while (self.iter.next()) |arg| {
                 if (arg.len == 0 or arg[0] != '-') return arg else {
                     for (jumpers) |jumper| {
+                        std.debug.print("jumper {s}, arg {s}\n", .{ jumper.longs.?[0], arg });
                         if (jumper.req_lvl == .required) {
                             switch (jumper.match(arg)) {
                                 .skip => return if (!std.mem.startsWith(u8, arg, "-=") and !std.mem.startsWith(u8, arg, "--=")) arg else {
@@ -79,8 +80,10 @@ pub fn Register(comptime T: type) type {
                                 .terminator => return null,
                             }
                         }
+                    } else {
+                        self.diag.hint(arg);
+                        return GlobalParsingError.UnknownFlag;
                     }
-                    continue :find;
                 }
             } else return null;
         }

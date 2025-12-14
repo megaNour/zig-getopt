@@ -11,7 +11,7 @@ pub fn main() void {
     //
     // The iterator in and of itself is just a book-keeper that we can cheaply copy around.
     // copying the iterator allows to have multiple jumpers starting from the same point but looking for different flags.
-    const iterator = try std.process.argsWithAllocator(arena.allocator());
+    var iterator = try std.process.argsWithAllocator(arena.allocator());
     var myOpt = jump.Over(ArgIterator).init(iterator, 'v', &.{ "verbose", "ver" }, .forbidden, "get useful debug output");
 
     // Jumping over a given option lazily consumeing everything until end of argv or '--' included
@@ -42,9 +42,37 @@ pub fn main() void {
     // However, (if like most people) you sometimes use space, like "--option value" instead of "--option=value",
     // then you cannot use this safely. See Register usage for that matter.
     var myPos = jump.OverPosLean(ArgIterator).init(iterator);
-    while (myPos.next()) |opt| { // first one will be the file name. The library doesn't decide to auto-discard it for you.
-        std.debug.print("positional: {s}\n", .{opt});
+    while (myPos.next()) |val| { // first one will be the file name. The library doesn't decide to auto-discard it for you.
+        std.debug.print("positional: {s}\n", .{val});
     } else {
         std.debug.print("no (more) positional argument!\n", .{});
+    }
+
+    // Moving to next command is done by moving an iterator cursor to after an optional "--"
+    jump.OverCommand(ArgIterator, &iterator);
+
+    // A Register is a structure meant to provide capabilites which need require knowing a group of flags.
+    var register = jump.Register(ArgIterator).init(iterator);
+
+    // When you give it an array of jumpers, it can validate your command is wellformed.
+    // It will iterate over argv and make sure your flags are declared and their Level is respected.
+    // In a word it's a fat loop.
+    register.validate(&[_]jump.Over(ArgIterator){myOpt}) catch |err| {
+        std.debug.print("validation: {any}, hint: {s}\n", .{ err, register.diag.debug_hint });
+    };
+
+    // Validation was done on a throw-away copy of the iterator given to the register. It's iterator is still at the start.
+    // So we can start jumping on positionals even after validating all args.
+    // This is the second capability brouhgt by the Register.
+    // Since it knows which flag consume value, it can discriminate "--option value" from "--opotion positional"
+    while (register.nextPos(&[_]jump.Over(ArgIterator){myOpt})) |opt| {
+        if (opt) |val| std.debug.print("positional from Register: {s}\n", .{val});
+    } else |err| {
+        switch (err) {
+            error.ForbiddenValue => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),
+            error.MissingValue => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),
+            error.MalformedFlag => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),
+            error.UnknownFlag => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),
+        }
     }
 }
