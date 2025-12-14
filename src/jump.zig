@@ -63,7 +63,7 @@ pub fn Register(comptime T: type) type {
             }
         }
 
-        /// This is the reliable way to get positional arguments if you write any required flag value detached from the flag: '-k v' instead of '-k=v'
+        /// This is the reliable way to get positional arguments if you write any required flag value detached from the flag: "--option value" instead of "--option=value"
         pub fn nextPos(self: *@This(), jumpers: []const Over(T)) (error{MalformedFlag} || LocalParsingError)!?[]const u8 {
             find: while (self.iter.next()) |arg| {
                 if (arg.len == 0 or arg[0] != '-') return arg else {

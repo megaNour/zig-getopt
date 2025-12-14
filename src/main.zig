@@ -39,7 +39,7 @@ pub fn main() void {
 
     // Jumps over positionals in a "lean" fashion.
     // Always writing your option values with an "=" is ideal as it allows more determinism in the parser.
-    // However, (if like most people) you sometimes use space, like "option value" instead of "option=value",
+    // However, (if like most people) you sometimes use space, like "--option value" instead of "--option=value",
     // then you cannot use this safely. See Register usage for that matter.
     var myPos = jump.OverPosLean(ArgIterator).init(iterator);
     while (myPos.next()) |opt| { // first one will be the file name. The library doesn't decide to auto-discard it for you.
