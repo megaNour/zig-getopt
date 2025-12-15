@@ -51,25 +51,47 @@ pub fn main() void {
     // Moving to next command is done by moving an iterator cursor to after an optional "--"
     jump.OverCommand(ArgIterator, &iterator);
 
-    // A Register is a structure meant to provide capabilites which need require knowing a group of flags.
-    var register = jump.Register(ArgIterator).init(iterator);
+    // A Register is a structure meant to provide global capabilites.
+    var register = jump.Register(ArgIterator).init();
 
-    // When you give it an array of jumpers, it can validate your command is wellformed.
+    // When you give it an array of jumpers and a throw-away iterator, it can validate your command is wellformed.
     // It will iterate over argv and make sure your flags are declared and their Level is respected.
     // In a word it's a fat loop.
-    register.validate(&[_]jump.Over(ArgIterator){myOpt}) catch |err| {
-        std.debug.print("validation: {any}, hint: {s}\n", .{ err, register.diag.debug_hint });
-    };
+    // Since you have control over the iterator, you can make it iterate until no more errors.
+    // Whic means you can catch all errors here.
+    var throw_away_iter = iterator;
+    while (true) {
+        register.validate(&[_]jump.Over(ArgIterator){myOpt}, &throw_away_iter) catch |err| {
+            std.debug.print("validation: {any}, hint: {s}\n", .{ err, register.diag.debug_hint });
+            std.debug.print("this is where you would exit or handle it. Let's pretend we took action to fix and continue.\n", .{});
+            std.debug.print("---\n", .{});
+            continue;
+        };
+        break;
+    }
 
-    // Validation was done on a throw-away copy of the iterator given to the register. It's iterator is still at the start.
-    // So we can start jumping on positionals even after validating all args.
     // This is the second capability brouhgt by the Register.
-    // Since it knows which flag consume value, it can discriminate "--option value" from "--opotion positional"
+    // Since it knows which flags consume values, it can discriminate "--option value" from "--opotion positional"
+    // So it can reliably jump between positional arguments without mixing up flag values.
+    //
+    // This starts at the same point as the previous validate() as we use "iterator" and not the "throw_away_iter".
+    // Since this has been validated, we can drop error handling. Obviously here, I'm just ignoring errors that should not remain.
+    while (register.nextPos(&[_]jump.Over(ArgIterator){myOpt}, &iterator)) |opt| {
+        if (opt) |val| std.debug.print("pos: {s}", .{val}) else break;
+    } else |_| {
+        std.debug.print("unreachable if you handled validation errors\n", .{});
+        std.debug.print("continuing happily though...\n", .{});
+        std.debug.print("---\n", .{});
+    }
 
-    while (register.nextPos(&[_]jump.Over(ArgIterator){myOpt})) |opt| {
+    jump.OverCommand(ArgIterator, &iterator);
+
+    // Now in reality, if you didn't handle things in validate, you would rather have that.
+    // Here since we are advancing the iterator, this one will validate a next subcommand.
+    while (register.nextPos(&[_]jump.Over(ArgIterator){myOpt}, &iterator)) |opt| {
         if (opt) |val| std.debug.print("positional from Register: {s}\n", .{val}) else break;
     } else |err| {
-        switch (err) {
+        switch (err) { // Obviously I handled errs all the same. Listing here for documentation.
             error.ForbiddenValue => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),
             error.MissingValue => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),
             error.MalformedFlag => std.debug.print("pos: {any}, hint: {s}\n", .{ err, register.diag.debug_hint }),

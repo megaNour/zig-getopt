@@ -14,35 +14,67 @@ pub const GlobalParsingError = error{
 /// Provides the centralized 'smart' behavior and flexibility people expect.
 pub fn Register(comptime T: type) type {
     return struct {
-        iter: T,
         diag: Diag = Diag{ .debug_buf = undefined, .debug_hint = undefined },
 
-        pub fn init(iter: T) @This() {
-            var this = @This(){ .iter = iter };
+        pub fn init() @This() {
+            var this = @This(){};
             this.diag.init();
             return this;
         }
 
-        /// If an arg starts with '-', this loops over all jumpers until it matches one or invalidates the arg.
-        pub fn validate(self: *@This(), jumpers: []const Over(T)) GlobalParsingError!void {
-            var throw_away = self.iter;
-            validation: while (throw_away.next()) |arg| {
-                if (arg.len > 1 and arg[0] == '-') {
-                    for (jumpers) |jumper| {
-                        switch (jumper.match(arg)) {
-                            .skip => return if (std.mem.startsWith(u8, arg, "-=") or std.mem.startsWith(u8, arg, "--=")) {
-                                self.diag.hint(arg);
-                                return GlobalParsingError.MalformedFlag;
-                            } else continue,
-                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &throw_away, err, arg)) break else return err,
-                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &throw_away, err, arg)) break else return err,
-                            .terminator => break :validation,
-                        }
-                    } else {
-                        self.diag.hint(arg);
-                        return GlobalParsingError.UnknownFlag;
+        /// Validates all params in until next command.
+        pub fn validate(self: *@This(), jumpers: []const Over(T), iterator: *T) GlobalParsingError!void {
+            while (self.nextPos(jumpers, iterator)) |opt| {
+                if (opt) |_| continue else break;
+            } else |err| return err;
+        }
+
+        /// This is the reliable way to get positional arguments
+        /// i.e. you write any required value detached from the flag: "--option value" instead of "--option=value"
+        pub fn nextPos(self: *@This(), jumpers: []const Over(T), iterator: *T) GlobalParsingError!?[]const u8 {
+            while (iterator.next()) |arg| {
+                std.debug.print("arg: {s}\n", .{arg});
+                if (arg.len < 2 or arg[0] != '-') return arg else if (std.mem.startsWith(u8, arg, "-=") or std.mem.startsWith(u8, arg, "--=")) {
+                    self.diag.hint(arg);
+                    return GlobalParsingError.MalformedFlag;
+                } else if (arg[1] == '-') { // the arg is a long opt we do a regular match trial
+                    if (self.try_match(jumpers, iterator, arg)) |opt| _ = opt orelse return null else |err| return err;
+                } else { // the arg is a short opt(s) chain and we need to try matching each char
+                    for (arg[1..]) |char| {
+                        const dashed: [2]u8 = .{ '-', char }; // adding the '-' here allows Over.match() to only consider raw form args.
+                        if (self.try_match(jumpers, iterator, &dashed)) |opt| _ = opt orelse return null else |err| return err;
                     }
                 }
+            } else return null;
+        }
+
+        fn try_match(self: *@This(), jumpers: []const Over(T), iterator: *T, arg: []const u8) GlobalParsingError!?void {
+            for (jumpers) |jumper| {
+                std.debug.print("Jumper: {c}, try match: {s}\n", .{ jumper.short.?, arg });
+                std.debug.print("coucou: {any}\n", .{jumper.match(arg)});
+                switch (jumper.match(arg)) { // so, we could make match() "smarter" but that would be coupling the simple parser with the Register
+                    .skip => continue,
+                    .short => {
+                        if (jumper.parseFlagChain(arg)) |_| {
+                            std.debug.print("char-arg is: {s}\n", .{arg});
+                            break;
+                        } else |err| {
+                            if (self.peekAtNextArgForValue(jumper.req_lvl, iterator, err, arg)) break else return err;
+                        }
+                    },
+                    .long => if (jumper.parseArg(arg)) |_| {
+                        std.debug.print("long {s}\n", .{arg});
+                        break;
+                    } else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, iterator, err, arg)) break else return err,
+                    .terminator => {
+                        std.debug.print("terminating: {s}\n", .{arg});
+                        return null;
+                    },
+                }
+            } else {
+                std.debug.print("gonna break\n", .{});
+                self.diag.hint(arg);
+                return GlobalParsingError.UnknownFlag;
             }
         }
 
@@ -62,33 +94,6 @@ pub fn Register(comptime T: type) type {
                 LocalParsingError.ForbiddenValue => unreachable,
             }
         }
-
-        /// This is the reliable way to get positional arguments if you write any required flag value detached from the flag: "--option value" instead of "--option=value"
-        pub fn nextPos(self: *@This(), jumpers: []const Over(T)) GlobalParsingError!?[]const u8 {
-            find: while (self.iter.next()) |arg| {
-                if (arg.len == 0 or arg[0] != '-') return arg else {
-                    for (jumpers) |jumper| {
-                        switch (jumper.match(arg)) {
-                            .skip => if (!std.mem.startsWith(u8, arg, "-=") and !std.mem.startsWith(u8, arg, "--=")) {
-                                _ = self.iter.next();
-                            } else {
-                                self.diag.hint(arg);
-                                return GlobalParsingError.MalformedFlag;
-                            },
-                            .short => if (jumper.parseFlagChain(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
-                            .long => if (jumper.parseArg(arg)) |_| break else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, &self.iter, err, arg)) continue :find else return err,
-                            .terminator => return null,
-                        }
-                    } else {
-                        self.diag.hint(arg);
-                        return GlobalParsingError.UnknownFlag;
-                    }
-                }
-            } else return null;
-        }
-
-        /// Since it knows all jumpers, it can also aggregate help.
-        pub fn help() ?[]const u8 {}
     };
 }
 
@@ -272,7 +277,7 @@ pub fn Over(comptime T: type) type {
             return .skip;
         }
 
-        /// At this point we need the input to be starting with '--' then a valid target flag.
+        /// At this point we consider the input is raw and starts with "--"
         fn parseArg(self: *const @This(), arg: []const u8) LocalParsingError!?[]const u8 {
             switch (self.req_lvl) {
                 Level.required => {
@@ -295,8 +300,8 @@ pub fn Over(comptime T: type) type {
             }
         }
 
-        /// The input at this point needs to be a flag chain without leading '-'.
-        /// Reaching here means we know the .short field is not null.
+        /// At this point we consider the input is raw and starts with '-'
+        /// Reaching here proves ".short" field is not null.
         fn parseFlagChain(self: *const @This(), haystack: []const u8) LocalParsingError!?[]const u8 {
             switch (self.req_lvl) {
                 Level.required => {

@@ -138,7 +138,7 @@ test "jump greedy" {
 }
 
 test "edge cases" {
-    const iterator = StringIterator{ .stock = &.{ "-=abcdef", "--=abcdef", "=abcdef" } };
+    var iterator = StringIterator{ .stock = &.{ "-=abcdef", "--=abcdef", "=abcdef" } };
     var jumper = jump.Over(StringIterator).init(iterator, 'a', &.{"alif"}, .required, "a random flag");
     var pos = jump.OverPosLean(StringIterator).init(iterator);
 
@@ -146,8 +146,8 @@ test "edge cases" {
     try expect(std.mem.eql(u8, pos.next().?, "=abcdef"));
 
     const jumpers = [_]jump.Over(StringIterator){jumper};
-    var register = jump.Register(StringIterator).init(iterator);
-    try expectError(jump.GlobalParsingError.MalformedFlag, register.validate(&jumpers));
+    var register = jump.Register(StringIterator).init();
+    try expectError(jump.GlobalParsingError.MalformedFlag, register.validate(&jumpers, &iterator));
 }
 
 test "jump over command" {
@@ -164,31 +164,31 @@ test "jump over command" {
 // and it detect flag typos (not value pertinence).
 // Register tests act on the whole list of arguments, they require some init... redoing it by test was the most straight-forward way...
 test "register validation OK" {
-    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data", "-" } };
+    var iterator = StringIterator{ .stock = &.{ "-d", "alif", "--data", "-" } };
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
-    var register = jump.Register(StringIterator).init(iterator);
-    try register.validate(&jumpers);
+    var register = jump.Register(StringIterator).init();
+    try register.validate(&jumpers, &iterator);
 }
 
 test "register validation UnknownFlag error" {
-    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--dota", "-" } };
+    var iterator = StringIterator{ .stock = &.{ "-d", "alif", "--dota", "-" } };
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
-    var register = jump.Register(StringIterator).init(iterator);
-    try expectError(jump.GlobalParsingError.UnknownFlag, register.validate(&jumpers));
+    var register = jump.Register(StringIterator).init();
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.validate(&jumpers, &iterator));
     try expect(std.mem.eql(u8, register.diag.debug_hint, "--dota"));
 }
 
 test "register validation MalformedFlag error" {
-    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "--=", "-" } };
+    var iterator = StringIterator{ .stock = &.{ "-d", "alif", "--=", "-" } };
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
-    var register = jump.Register(StringIterator).init(iterator);
-    try expectError(jump.GlobalParsingError.MalformedFlag, register.validate(&jumpers));
+    var register = jump.Register(StringIterator).init();
+    try expectError(jump.GlobalParsingError.MalformedFlag, register.validate(&jumpers, &iterator));
     try expect(std.mem.eql(u8, register.diag.debug_hint, "--="));
 }
 
@@ -197,23 +197,28 @@ test "register validation only affects current subcommand" {
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
-    var register = jump.Register(StringIterator).init(iterator);
+    var register = jump.Register(StringIterator).init();
     // validate the first subcommand only
-    try register.validate(&jumpers);
-    // move to the next and validate
-    jump.OverCommand(StringIterator, &iterator);
-    register = jump.Register(StringIterator).init(iterator);
-    try expectError(jump.GlobalParsingError.UnknownFlag, register.validate(&jumpers));
+    var throw_away_iterator = iterator;
+    try register.validate(&jumpers, &throw_away_iterator);
+    // now suppose I know I want the second subcommand but I don't want to validate the previous one.
+    jump.OverCommand(StringIterator, &iterator); // now the first subcommand is behind
+    // and I can validate the next one
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.validate(&jumpers, &iterator));
     try expect(std.mem.eql(u8, register.diag.debug_hint, "-x"));
 }
 
 test "next pos with optional '='" {
-    const iterator = StringIterator{ .stock = &.{ "-d", "alif", "positional", "-x", "ba" } };
+    var iterator = StringIterator{ .stock = &.{ "-d", "alif", "positional", "-vx", "--xoxo", "ba", "--data", "ta", "--data=tha", "-d", "jiim", "last" } };
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
-    const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
+    const other = jump.Over(StringIterator).init(iterator, 'v', &.{"verbose"}, .forbidden, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
-    var register = jump.Register(StringIterator).init(iterator);
-    try expect(std.mem.eql(u8, (try register.nextPos(&jumpers)).?, "positional"));
-    try expectError(jump.GlobalParsingError.UnknownFlag, register.nextPos(&jumpers));
-    try expect(std.mem.eql(u8, register.diag.debug_hint, "-x"));
+    var register = jump.Register(StringIterator).init();
+    try expect(std.mem.eql(u8, (try register.nextPos(&jumpers, &iterator)).?, "positional"));
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.nextPos(&jumpers, &iterator));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "-x")); // unknown flag will not consume next.
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.nextPos(&jumpers, &iterator));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "--xoxo")); // unknown flag will not consume next.
+    try expect(std.mem.eql(u8, (try register.nextPos(&jumpers, &iterator)).?, "ba"));
+    try expect(std.mem.eql(u8, (try register.nextPos(&jumpers, &iterator)).?, "last"));
 }
