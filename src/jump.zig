@@ -33,7 +33,6 @@ pub fn Register(comptime T: type) type {
         /// i.e. you write any required value detached from the flag: "--option value" instead of "--option=value"
         pub fn nextPos(self: *@This(), jumpers: []const Over(T), iterator: *T) GlobalParsingError!?[]const u8 {
             while (iterator.next()) |arg| {
-                std.debug.print("arg: {s}\n", .{arg});
                 if (arg.len < 2 or arg[0] != '-') return arg else if (std.mem.startsWith(u8, arg, "-=") or std.mem.startsWith(u8, arg, "--=")) {
                     self.diag.hint(arg);
                     return GlobalParsingError.MalformedFlag;
@@ -41,6 +40,7 @@ pub fn Register(comptime T: type) type {
                     if (self.try_match(jumpers, iterator, arg)) |opt| _ = opt orelse return null else |err| return err;
                 } else { // the arg is a short opt(s) chain and we need to try matching each char
                     for (arg[1..]) |char| {
+                        // FIX: see how we handle the '=' case when we don't pass the whole chain...
                         const dashed: [2]u8 = .{ '-', char }; // adding the '-' here allows Over.match() to only consider raw form args.
                         if (self.try_match(jumpers, iterator, &dashed)) |opt| _ = opt orelse return null else |err| return err;
                     }
@@ -50,46 +50,43 @@ pub fn Register(comptime T: type) type {
 
         fn try_match(self: *@This(), jumpers: []const Over(T), iterator: *T, arg: []const u8) GlobalParsingError!?void {
             for (jumpers) |jumper| {
-                std.debug.print("Jumper: {c}, try match: {s}\n", .{ jumper.short.?, arg });
-                std.debug.print("coucou: {any}\n", .{jumper.match(arg)});
                 switch (jumper.match(arg)) { // so, we could make match() "smarter" but that would be coupling the simple parser with the Register
                     .skip => continue,
                     .short => {
-                        if (jumper.parseFlagChain(arg)) |_| {
-                            std.debug.print("char-arg is: {s}\n", .{arg});
-                            break;
-                        } else |err| {
-                            if (self.peekAtNextArgForValue(jumper.req_lvl, iterator, err, arg)) break else return err;
-                        }
-                    },
-                    .long => if (jumper.parseArg(arg)) |_| {
-                        std.debug.print("long {s}\n", .{arg});
+                        _ = jumper.parseFlagChain(arg) catch |err| {
+                            _ = peekAtNextArgForValue(self, iterator, jumper.req_lvl, arg, err) catch |peek_err| return peek_err;
+                        };
                         break;
-                    } else |err| if (self.peekAtNextArgForValue(jumper.req_lvl, iterator, err, arg)) break else return err,
+                    },
+                    .long => {
+                        _ = jumper.parseArg(arg) catch |err| {
+                            _ = peekAtNextArgForValue(self, iterator, jumper.req_lvl, arg, err) catch |peek_err| return peek_err;
+                        };
+                        break;
+                    },
                     .terminator => {
-                        std.debug.print("terminating: {s}\n", .{arg});
                         return null;
                     },
                 }
             } else {
-                std.debug.print("gonna break\n", .{});
                 self.diag.hint(arg);
                 return GlobalParsingError.UnknownFlag;
             }
         }
 
-        fn peekAtNextArgForValue(self: *@This(), req_lvl: Level, iterator: *T, err: LocalParsingError, arg: []const u8) bool {
+        fn peekAtNextArgForValue(self: *@This(), iterator: *T, req_lvl: Level, arg: []const u8, err: LocalParsingError) LocalParsingError!void {
             if (req_lvl != .required) {
-                return false; // not interested in looking, only required level may have a detached value
+                return err; // not interested in looking, only required level may have a detached value
             } else switch (err) {
                 LocalParsingError.MissingValue => {
-                    if (iterator.next()) |next| {
+                    var throw_away_iter = iterator.*; // NOTE: if this fails, we don't want the next arg consumed, so we work on a copy first
+                    if (throw_away_iter.next()) |next| {
                         if (next.len > 1 and next[0] == '-') {
                             self.diag.hint(arg);
-                            return false;
+                            return err;
                         }
                     }
-                    return true;
+                    _ = iterator.next(); // the next arg is safe and required to consume as it is a value for current arg.
                 },
                 LocalParsingError.ForbiddenValue => unreachable,
             }

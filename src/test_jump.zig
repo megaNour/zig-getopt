@@ -1,8 +1,9 @@
 const std = @import("std");
 const ArgIterator = std.process.ArgIterator;
-const jump = @import("jump.zig");
 const expect = std.testing.expect;
 const expectError = std.testing.expectError;
+
+const jump = @import("jump.zig");
 
 pub const StringIterator = struct {
     stock: []const []const u8,
@@ -105,7 +106,6 @@ test "jump flags with required value affectation" {
     var jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
 
     // restricted is close to allowed, it can't be in the middle of a flag chain
-    // std.debug.print("arg: {s}", .{(try jumper.next()).?});
     try expect(std.mem.eql(u8, (try jumper.next()).?, "alif"));
     try expect(std.mem.eql(u8, (try jumper.next()).?, "va"));
 
@@ -169,7 +169,10 @@ test "register validation OK" {
     const other = jump.Over(StringIterator).init(iterator, 'e', &.{"extra"}, .required, "just so we don't have a 1 element array of jumpers");
     const jumpers = [_]jump.Over(StringIterator){ jumper, other };
     var register = jump.Register(StringIterator).init();
-    try register.validate(&jumpers, &iterator);
+    register.validate(&jumpers, &iterator) catch |err| {
+        std.debug.print("err: {any}, hint: {s}\n", .{ err, register.diag.debug_hint });
+        return err;
+    };
 }
 
 test "register validation UnknownFlag error" {
