@@ -37,7 +37,7 @@ pub fn Register(comptime T: type) type {
                     self.diag.hint(arg);
                     return GlobalParsingError.MalformedFlag;
                 } else if (arg[1] == '-') { // the arg is a long opt we do a regular match trial
-                    if (self.try_match(jumpers, iterator, arg, null)) |opt| _ = opt orelse return null else |err| return err;
+                    if (self.try_match(jumpers, iterator, arg, arg)) |opt| _ = opt orelse return null else |err| return err;
                 } else { // the arg is a short opt(s) chain and we need to try matching each char
                     for (arg[1..]) |char| {
                         const dashed: [2]u8 = .{ '-', char }; // adding the '-' here allows Over.match() to only consider raw form args.
@@ -54,13 +54,20 @@ pub fn Register(comptime T: type) type {
             } else return null;
         }
 
-        fn try_match(self: *@This(), jumpers: []const Over(T), iterator: *T, arg: []const u8, original: ?[]const u8) GlobalParsingError!?Level {
+        /// Always pass `original` because it is required context to correctly match short flags.
+        /// In the case of a long flag, `arg == original`, but this repetition simplifies the API:
+        /// - `--foo` -> arg == "--foo", original == "--foo"
+        /// - `-foo`  -> arg == '-f', then '-o', then '-o', while original == "-foo" for each iteration
+        ///
+        /// This design avoids duplicating the switch based on parameter availability
+        /// and eliminates the need for a misleading optional 'original'.
+        fn try_match(self: *@This(), jumpers: []const Over(T), iterator: *T, arg: []const u8, original: []const u8) GlobalParsingError!?Level {
             for (jumpers) |jumper| {
                 switch (jumper.match(arg)) { // so, we could make match() "smarter" but that would be coupling the simple parser with the Register
                     .skip => continue,
                     .short => {
-                        if (jumper.parseFlagChain(original.?)) |_| return jumper.req_lvl else |err| {
-                            if (peekAtNextArgForValue(self, iterator, jumper.req_lvl, original.?, err)) |_| return jumper.req_lvl else |peek_err| return peek_err;
+                        if (jumper.parseFlagChain(original)) |_| return jumper.req_lvl else |err| {
+                            if (peekAtNextArgForValue(self, iterator, jumper.req_lvl, original, err)) |_| return jumper.req_lvl else |peek_err| return peek_err;
                         }
                     },
                     .long => {
@@ -213,7 +220,7 @@ pub fn Over(comptime T: type) type {
         pub fn nextGreedy(self: *@This()) LocalParsingError!?[]const u8 {
             return self.next() catch |err| switch (err) {
                 LocalParsingError.MissingValue => if (self.peekAtNextArgForValue()) |res| res else err,
-                else => err,
+                LocalParsingError.ForbiddenValue => err,
             };
         }
 
@@ -222,7 +229,7 @@ pub fn Over(comptime T: type) type {
                 var peeker = self.iter; // make a copy of the iterator to next on it wihout losing our position
                 if (peeker.next()) |peekie| {
                     if (peekie.len == 0 or peekie[0] != '-') // A valid value is here for the taking
-                        return self.iter.next().?; // and so we do take it
+                        return if (self.iter.next()) |guaranteed| return guaranteed else unreachable; // and so we do take it
                 }
             }
             return null;
@@ -280,6 +287,7 @@ pub fn Over(comptime T: type) type {
         }
 
         /// At this point we consider the input is raw and starts with "--"
+        /// By construction, `.match()` has already returned `Action.long`,
         fn parseArg(self: *const @This(), arg: []const u8) LocalParsingError!?[]const u8 {
             switch (self.req_lvl) {
                 Level.required => {
@@ -303,39 +311,42 @@ pub fn Over(comptime T: type) type {
         }
 
         /// At this point we consider the input is raw and starts with '-'
+        /// By construction, `.match()` has already returned `Action.short`,
         /// Reaching here proves ".short" field is not null.
         fn parseFlagChain(self: *const @This(), haystack: []const u8) LocalParsingError!?[]const u8 {
-            switch (self.req_lvl) {
-                Level.required => {
-                    return if (std.mem.indexOfScalar(u8, haystack, self.short.?)) |pos| {
-                        if (haystack.len >= pos + 2) {
-                            return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
-                        } else {
-                            return LocalParsingError.MissingValue;
+            if (self.short) |short| {
+                switch (self.req_lvl) {
+                    Level.required => {
+                        return if (std.mem.indexOfScalar(u8, haystack, short)) |pos| {
+                            if (haystack.len >= pos + 2) {
+                                return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
+                            } else {
+                                return LocalParsingError.MissingValue;
+                            }
+                        } else unreachable;
+                    },
+                    Level.allowed => {
+                        if (std.mem.indexOfScalar(u8, haystack, short)) |pos| {
+                            if (haystack.len == pos + 1) {
+                                return &.{1};
+                            } else {
+                                return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
+                            }
+                        } else unreachable;
+                    },
+                    Level.forbidden => {
+                        var n: u8 = 0;
+                        for (haystack[1..], 1..) |c, i| {
+                            if (c == short) {
+                                n += 1;
+                            } else if (c == '=' and haystack[i - 1] == short) {
+                                return LocalParsingError.ForbiddenValue;
+                            }
                         }
-                    } else unreachable;
-                },
-                Level.allowed => {
-                    if (std.mem.indexOfScalar(u8, haystack, self.short.?)) |pos| {
-                        if (haystack.len == pos + 1) {
-                            return &.{1};
-                        } else {
-                            return if (haystack[pos + 1] == '=') haystack[pos + 2 ..] else haystack[pos + 1 ..];
-                        }
-                    } else unreachable;
-                },
-                Level.forbidden => {
-                    var n: u8 = 0;
-                    for (haystack[1..], 1..) |c, i| {
-                        if (c == self.short.?) {
-                            n += 1;
-                        } else if (c == '=' and haystack[i - 1] == self.short.?) {
-                            return LocalParsingError.ForbiddenValue;
-                        }
-                    }
-                    return &.{n};
-                },
-            }
+                        return &.{n};
+                    },
+                }
+            } else unreachable;
         }
     };
 }
