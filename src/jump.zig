@@ -76,6 +76,7 @@ pub fn Register(comptime T: type) type {
 
         fn peekAtNextArgForValue(self: *@This(), iterator: *T, req_lvl: Level, arg: []const u8, err: LocalParsingError) LocalParsingError!void {
             if (req_lvl != .required) {
+                self.diag.hint(arg);
                 return err; // not interested in looking, only required level may have a detached value
             } else switch (err) {
                 LocalParsingError.MissingValue => {
