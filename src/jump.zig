@@ -37,32 +37,36 @@ pub fn Register(comptime T: type) type {
                     self.diag.hint(arg);
                     return GlobalParsingError.MalformedFlag;
                 } else if (arg[1] == '-') { // the arg is a long opt we do a regular match trial
-                    if (self.try_match(jumpers, iterator, arg)) |opt| _ = opt orelse return null else |err| return err;
+                    if (self.try_match(jumpers, iterator, arg, null)) |opt| _ = opt orelse return null else |err| return err;
                 } else { // the arg is a short opt(s) chain and we need to try matching each char
                     for (arg[1..]) |char| {
-                        // FIX: see how we handle the '=' case when we don't pass the whole chain...
                         const dashed: [2]u8 = .{ '-', char }; // adding the '-' here allows Over.match() to only consider raw form args.
-                        if (self.try_match(jumpers, iterator, &dashed)) |opt| _ = opt orelse return null else |err| return err;
+                        if (self.try_match(jumpers, iterator, &dashed, arg)) |opt| {
+                            if (opt) |val| {
+                                switch (val) {
+                                    .forbidden => continue,
+                                    .allowed, .required => break, // either it was the last of the chain or a value was correctly consumed.
+                                }
+                            } else return null;
+                        } else |err| return err;
                     }
                 }
             } else return null;
         }
 
-        fn try_match(self: *@This(), jumpers: []const Over(T), iterator: *T, arg: []const u8) GlobalParsingError!?void {
+        fn try_match(self: *@This(), jumpers: []const Over(T), iterator: *T, arg: []const u8, original: ?[]const u8) GlobalParsingError!?Level {
             for (jumpers) |jumper| {
                 switch (jumper.match(arg)) { // so, we could make match() "smarter" but that would be coupling the simple parser with the Register
                     .skip => continue,
                     .short => {
-                        _ = jumper.parseFlagChain(arg) catch |err| {
-                            _ = peekAtNextArgForValue(self, iterator, jumper.req_lvl, arg, err) catch |peek_err| return peek_err;
-                        };
-                        break;
+                        if (jumper.parseFlagChain(original.?)) |_| return jumper.req_lvl else |err| {
+                            if (peekAtNextArgForValue(self, iterator, jumper.req_lvl, original.?, err)) |_| return jumper.req_lvl else |peek_err| return peek_err;
+                        }
                     },
                     .long => {
-                        _ = jumper.parseArg(arg) catch |err| {
-                            _ = peekAtNextArgForValue(self, iterator, jumper.req_lvl, arg, err) catch |peek_err| return peek_err;
-                        };
-                        break;
+                        if (jumper.parseArg(arg)) |_| return jumper.req_lvl else |err| {
+                            if (peekAtNextArgForValue(self, iterator, jumper.req_lvl, arg, err)) |_| return jumper.req_lvl else |peek_err| return peek_err;
+                        }
                     },
                     .terminator => {
                         return null;
