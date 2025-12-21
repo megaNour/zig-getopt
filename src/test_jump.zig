@@ -211,6 +211,23 @@ test "register validation only affects current subcommand" {
     try expect(std.mem.eql(u8, register.diag.debug_hint, "-x"));
 }
 
+test "register validation works on each elements of a flag chain" {
+    var iterator = StringIterator{ .stock = &.{"-vvvvx=abc"} };
+    const jumper = jump.Over(StringIterator).init(iterator, 'v', null, .forbidden, "a flag that cannot take value so nothing ambiguous about anything following");
+    var register = jump.Register(StringIterator).init();
+    try expectError(jump.GlobalParsingError.UnknownFlag, register.validate(&.{jumper}, &iterator));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "-x"));
+}
+
+test "register validation doesn't uselessly consume peekee when fails" { // Meaning, if next arg doesn't solve a missing value, don't consume it as the value of current arg.
+    var iterator = StringIterator{ .stock = &.{ "-d", "-abc" } };
+    const jumper = jump.Over(StringIterator).init(iterator, 'd', null, .required, "data flag, you must point to a valid file");
+    var register = jump.Register(StringIterator).init();
+    try expectError(jump.GlobalParsingError.MissingValue, register.validate(&.{jumper}, &iterator));
+    try expect(std.mem.eql(u8, register.diag.debug_hint, "-d"));
+    try expect(std.mem.eql(u8, iterator.next().?, "-abc"));
+}
+
 test "next pos with optional '='" {
     var iterator = StringIterator{ .stock = &.{ "-d", "alif", "positional", "-vx", "--xoxo", "ba", "--data", "ta", "--data=tha", "-d", "jiim", "last" } };
     const jumper = jump.Over(StringIterator).init(iterator, 'd', &.{"data"}, .required, "data flag, you must point to a valid file.");
