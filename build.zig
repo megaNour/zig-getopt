@@ -45,15 +45,17 @@ pub fn build(b: *std.Build) void {
 
     const run_exe_tests = b.addRunArtifact(exe);
     run_exe_tests.addArgs(&.{
+        "--data",
+        "my detached data",
         "-vv",
         "-vvvv",
-        "my positional",
-        "my other positional",
+        "positional 1",
+        "positional 2",
         "--",
         "-vvvv=forbidden",
         "--=",
-        "-ve",
         "aaa",
+        "-ve",
         "bbb",
         "--",
         "-v",
@@ -62,6 +64,8 @@ pub fn build(b: *std.Build) void {
         "--unknown",
         "value-identified-as-positional-after-unknown-flag-rejection",
         "-v=forbidden_value",
+        "--",
+        "-v=this value is way too long to fit in the Diag hint buffer so it is truncated",
     });
 
     const test_step = b.step("test", "Run tests");
