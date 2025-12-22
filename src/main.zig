@@ -3,6 +3,13 @@ const ArgIterator = std.process.ArgIterator;
 
 const jump = @import("jump");
 
+const _grn = "\x1b[38;5;2m";
+const _yel = "\x1b[38;5;3m";
+const _blu = "\x1b[38;5;4m";
+const _mag = "\x1b[38;5;5m";
+const _gry = "\x1b[38;5;8m";
+const _def = "\x1b[38;5;15m";
+
 pub fn main() !void {
     var stdout_buffer: [8192]u8 = undefined;
     var writer = std.fs.File.stdout().writer(&stdout_buffer);
@@ -16,27 +23,14 @@ pub fn main() !void {
     var iterator = try std.process.argsWithAllocator(std.heap.page_allocator);
     var myOpt = jump.Over(ArgIterator).init(iterator, 'v', &.{ "verbose", "ver" }, .forbidden, "get useful debug output");
 
-    const _grn = "\x1b[38;5;2m";
-    const _yel = "\x1b[38;5;3m";
-    const _blu = "\x1b[38;5;4m";
-    const _mag = "\x1b[38;5;5m";
-    const _gry = "\x1b[38;5;8m";
-    const _def = "\x1b[38;5;15m";
-
     try out.print(
-        \\{s}Disclaimer:
-        \\- For now it runs as a test so (example) errors are printed to stdout on purpose.
-        \\  Those errors are pedagogic content. They are meant to be displayed. (but without disrupting the build)
-        \\- Unit tests are planned to cover all the cases that were discovered here.
-        \\  Then, this will move out of the "test" step to a new "demo" step and errors will go to stderr.
-        \\
         \\{c}{s}Jump demo
         \\
-        \\{s}This demo parses args that are defined in build.zig.
+        \\{s}This demo parses args that are defined in `build.zig`.
         \\They are the following:{s}
         \\
         \\
-    , .{ _yel, '\t', _grn, _gry, _blu });
+    , .{ '\t', _grn, _gry, _blu });
 
     //////////////////////////////////////////////////////////
     // This is setup! This is not how we actually use jump! //

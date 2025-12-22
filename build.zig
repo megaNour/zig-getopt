@@ -29,22 +29,24 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_step = b.step("run", "Run the app");
-
-    const run_cmd = b.addRunArtifact(exe);
-    run_step.dependOn(&run_cmd.step);
+    const run_exe = b.addRunArtifact(exe);
+    run_step.dependOn(&run_exe.step);
 
     if (b.args) |args| {
-        run_cmd.addArgs(args);
+        run_exe.addArgs(args);
     }
 
     const mod_tests = b.addTest(.{
         .root_module = test_mod,
     });
 
+    const test_step = b.step("test", "Run tests");
     const run_mod_tests = b.addRunArtifact(mod_tests);
+    test_step.dependOn(&run_mod_tests.step);
 
-    const run_exe_tests = b.addRunArtifact(exe);
-    run_exe_tests.addArgs(&.{
+    const demo_step = b.step("demo", "Run demo");
+    const run_exe_demo = b.addRunArtifact(exe);
+    run_exe_demo.addArgs(&.{
         "--data",
         "my detached data",
         "-vv",
@@ -67,8 +69,5 @@ pub fn build(b: *std.Build) void {
         "--",
         "-v=this value is way too long to fit in the Diag hint buffer so it is truncated",
     });
-
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_mod_tests.step);
-    test_step.dependOn(&run_exe_tests.step);
+    demo_step.dependOn(&run_exe_demo.step);
 }
