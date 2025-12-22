@@ -22,6 +22,7 @@ pub fn main() !void {
     // The iterator in and of itself is just a book-keeper that we can cheaply copy around.
     // copying the iterator allows to have multiple jumpers starting from the same point but looking for different flags.
     var iterator = try std.process.argsWithAllocator(std.heap.page_allocator);
+    defer iterator.deinit();
     var myOpt = jump.Over(ArgIterator).init(iterator, 'v', &.{ "verbose", "ver" }, .forbidden, "get useful debug output");
 
     try out.print(
