@@ -3,6 +3,7 @@ const ArgIterator = std.process.ArgIterator;
 
 const jump = @import("jump");
 
+// I hope you don't mind a few colors...
 const _grn = "\x1b[38;5;2m";
 const _yel = "\x1b[38;5;3m";
 const _blu = "\x1b[38;5;4m";
