@@ -15,7 +15,7 @@
 - Works In a classic fat loop style: '=' optional.
 - Subcommands are supported.
 - Full control is given over value interpretation and error handling.
-- No State-holding structures are forcefully pushed on you to.
+- No State-holding structures are forcefully pushed on you.
 - Fits in ~350 lines of code.
 
 ## What It Does Not Do
